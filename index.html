@@ -890,7 +890,7 @@
       .tabs { width: 100%; overflow-x: auto; }
     }
 
-    /* ===== 限定公開のロック画面 (簡易的な鍵。gate.json がある公開環境でだけ有効) ===== */
+    /* ===== 限定公開のロック画面 (gate.json がある公開環境でだけ有効) ===== */
     html.gate-check body > *:not(.gate) { visibility: hidden; }
     body.gated > *:not(.gate) { display: none !important; }
     .gate { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: var(--hero-bg); }
@@ -3298,7 +3298,7 @@
       show(fromHash());
     })();
 
-    // ===== 限定公開 (簡易的な鍵) =====
+    // ===== 限定公開 (アクセスコード) =====
     // 公開時のデプロイで gate.json が置かれたときだけ有効 (手元で開いたときは出ない)。
     // コードは NFKC 正規化・前後の空白除去・小文字化してから、gate.json の salt を前に付けて SHA-256。
     // scripts/build_site.py と同じ手順でなければならない。コードそのものはどこにも置かない (ハッシュだけ)。

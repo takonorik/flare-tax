@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """GitHub Pages に置くファイルを out ディレクトリにまとめる。
 
-限定公開（簡易的な鍵）は GitHub の設定だけで切り替える:
+限定公開（アクセスコード）は GitHub の設定だけで切り替える:
   Settings → Secrets   ACCESS_CODE = アクセスコード
   Settings → Variables ACCESS_GATE = on / off
 on のときだけ gate.json を置き、検索エンジンに載らないよう noindex を付ける。

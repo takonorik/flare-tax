@@ -2,7 +2,7 @@ name: Deploy
 
 # main に push されたら GitHub Pages に公開する。Actions タブの「Run workflow」でも公開し直せる。
 #
-# 限定公開（簡易的な鍵）は、コードを変えずに GitHub の設定だけで切り替える:
+# 限定公開（アクセスコード）は、コードを変えずに GitHub の設定だけで切り替える:
 #   Settings → Secrets and variables → Actions
 #     Secrets   ACCESS_CODE = アクセスコード
 #     Variables ACCESS_GATE = on / off
