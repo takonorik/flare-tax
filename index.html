@@ -1787,6 +1787,7 @@
           <li>分類や円価格の計算に誤りや漏れがある可能性があります。出力されたCSVは、必ずご自身で内容を確認してからお使いください。</li>
           <li>対応していない dApp や、新しいコントラクトの取引は、正しく分類されないことがあります。</li>
           <li>取引データは公開API（Flare Blockscout、Flare の公開RPC）、円価格は bitbank の公開APIから取得しています。これらの提供元の障害や仕様変更、データの欠落によって結果が変わることがあります。</li>
+          <li>予告なく、判定の方法や出力の内容を変えることがあります。同じ取引でも、版によって結果が変わることがあります。</li>
         </ul>
 
         <h2>データの扱い</h2>
@@ -1798,10 +1799,17 @@
           <li>履歴ファイルは、利用者の端末にだけ保存されます。ファイルにはウォレットのアドレスと取引履歴が入っているので、人に渡すときはご注意ください。</li>
         </ul>
 
+        <h2>責任は負いません</h2>
+        <ul>
+          <li>このツールは現状のまま、無保証で提供します。</li>
+          <li>このツールの利用、または利用できなかったことによって生じた損害（申告の誤り、追徴課税、加算税、延滞税、機会の損失などを含みますが、これに限りません）について、作成者は一切の責任を負いません。ご自身の責任でご利用ください。</li>
+          <li>動作の継続、不具合の修正、問い合わせへの対応を約束するものではありません。</li>
+        </ul>
+
         <h2>その他</h2>
         <ul>
           <li>このツールは個人が作成したもので、クリプタクト・Flare Network・各 dApp の運営元とは関係ありません。</li>
-          <li>このツールの利用によって生じたいかなる損害についても、作成者は責任を負いません。ご自身の責任でご利用ください。</li>
+          <li>このツールを使った時点で、このページの内容に同意したものとします。</li>
         </ul>
       </div>
       <aside class="doc-toc" aria-label="目次"></aside>
@@ -2866,8 +2874,15 @@
           const p = lastProgress;
           if (!p) { textEl.textContent = `${first()} （経過 ${elapsed}秒）`; return; }
           {
-            if (p.active && p.pricing_total > 0) {
-              textEl.textContent = `円価格を計算中... ${p.pricing_done} / ${p.pricing_total}行 （経過 ${elapsed}秒）`;
+            // 段階 (phase) が分かるときはそれを優先する。件数が動かない段階でも、何をしているかを出す
+            if (p.phase === 'pricing' || (p.active && p.pricing_total > 0)) {
+              textEl.textContent = p.pricing_total > 0
+                ? `円価格を計算中... ${p.pricing_done} / ${p.pricing_total}行 （経過 ${elapsed}秒）`
+                : `円価格を計算中... （経過 ${elapsed}秒）`;
+            } else if (p.phase === 'classify') {
+              textEl.textContent = `取引を分類しています... （経過 ${elapsed}秒）`;
+            } else if (p.phase === 'extras') {
+              textEl.textContent = `取引の追加情報を取得中...（LP・ブリッジなどの詳細。件数によって数十秒かかります） （経過 ${elapsed}秒）`;
             } else if (p.active && p.from_file) {
               textEl.textContent =
                 `履歴ファイル＋新しい取引を取得中... 新しい取引 通常tx ${p.flr_items.toLocaleString()}件 / ` +

@@ -64,6 +64,7 @@ class _Progress:
             internal_items=0,
             pricing_done=0, pricing_total=0,
             from_file=False, saved_items=0,
+            phase="fetch",  # fetch → extras → classify → pricing (画面の表示に使う)
         )
 
 
@@ -135,6 +136,9 @@ async def _fetch_wallet(client: httpx.AsyncClient, wallet: str, track: bool, sav
         fetch_token_transfers(client, wallet, None, on_page=on("transfer_pages", "transfer_items"), saved=saved_transfers),
         fetch_internal_transactions(client, wallet, on_page=(lambda p, n: progress.update(internal_items=n)) if track else None),
     )
+    # ここからは取引ごとの追加情報 (LP のポジション・ブリッジのイベントなど) を取る。件数は動かないので、段階を知らせる
+    if track:
+        progress.update(phase="extras")
     # 直近14日の重なりで取り直した tx は新しい item が正だが、追加取得の印 (過去の tx では変わらない) は保存済みから引き継ぐ
     if saved_flr:
         old_by_hash = {t.get("hash"): t for t in saved_flr}
@@ -394,6 +398,7 @@ async def _run_core(addrs: list, start_date, end_date, saved_wallets: Optional[d
     warnings = list(extra_warnings or []) + [w for d in results for w in d["warnings"]]
     notices = [n for d in results for n in d["notices"]]
 
+    progress.update(phase="classify")
     result = build_result(
         main_data["flr_txs"],
         main_data["token_transfers"],
@@ -408,7 +413,7 @@ async def _run_core(addrs: list, start_date, end_date, saved_wallets: Optional[d
     )
 
     # 価格データの無いトークンの円価格 (bitbank・sFLRの交換比率・経由したWFLR)
-    progress.update(active=True, pricing_done=0, pricing_total=0)
+    progress.update(active=True, pricing_done=0, pricing_total=0, phase="pricing")
     try:
         async with httpx.AsyncClient() as client:
             await price_rows(
