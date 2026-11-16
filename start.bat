@@ -1,7 +1,8 @@
 @echo off
+rem UTF-8 (must come before any non-ASCII line)
+chcp 65001 >nul
 rem Flare Tax for Cryptact 手元起動スクリプト (ダブルクリックで起動)
 rem ブラウザだけで動くので、インストールもAPIサーバーも不要です。
-chcp 65001 >nul
 cd /d "%~dp0"
 
 where py >nul 2>nul
