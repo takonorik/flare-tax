@@ -1,0 +1,35 @@
+# 利用者が保存する履歴ファイル (ウォレットのアドレスと全取引が入る)
+flare_history_*.json.gz
+
+# 個人のアドレスが入るファイル
+my-addresses.md
+flare-wallet-list*.json
+
+# 利用者が保存する出力CSV (取引の中身が入る)
+flare_tax_*.csv
+flare_lp_*.csv
+
+# 作者が実際に出力したCSV
+csv-test/
+
+# 録ったウォレットの全履歴と、その分類結果 (テスト用。自分のウォレットで録り直す)
+tests/fixtures/
+tests/snapshots/
+
+# 調査用の生データ
+tx1.json
+tx2.json
+
+# 実行環境・キャッシュ・エディタの設定
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.claude/
+.DS_Store
+
+# ロゴの素材 (画面でも README でも使っていない。Flare の公式ロゴなので配布しない)
+logo/
+
+# 公開用にまとめたファイル (scripts/build_site.py が作る)
+_site/

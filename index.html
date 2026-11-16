@@ -1,0 +1,3326 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <!-- 限定公開の確認が終わるまで中身を見せない (下の initGate が外す) -->
+  <script>document.documentElement.classList.add('gate-check')</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flare Tax for Cryptact</title>
+  <meta name="description" content="Flare Networkの取引履歴をクリプタクトCSV形式で出力するツール">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800;900&family=Noto+Sans+JP:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap"
+    rel="stylesheet">
+  <style>
+    /* ===== Design Tokens (Stake Chef と共通のデザイン言語) ===== */
+    :root {
+      --pink: #E62058;
+      --pink-deep: #B3134A;
+      --pink-soft: #FFE3EB;
+      --pink-tint: #FFF0F4;
+      --bg: #FFF8FA;
+      --surface: #FFFFFF;
+      --text: #141016;
+      --muted: #6F6572;
+      --line: #141016;
+      --shadow: #141016;
+      --field: #FFF0F4;
+      --btn-bg: #141016;
+      --btn-fg: #FFFFFF;
+      color-scheme: light;
+      --hero-bg: radial-gradient(circle at 88% 8%, #FF9AB6 0, transparent 42%),
+        radial-gradient(circle at 6% 100%, #FFC2D4 0, transparent 45%), #FFE3EB;
+      --ok: #0F6E56;
+      --ok-soft: #DDF3EA;
+      --warn: #B3134A;
+      --sans: 'Inter', 'Noto Sans JP', sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+
+      /* 旧トークン名 (JS内のインラインスタイルが参照) を新トークンへ */
+      --clr-primary: var(--pink);
+      --clr-secondary: var(--pink-deep);
+      --clr-text: var(--text);
+      --clr-text-muted: var(--muted);
+      --clr-border: var(--pink-soft);
+      --clr-bg-dark: var(--field);
+      --clr-bg-input: var(--field);
+      --font-mono: var(--mono);
+      --font-sans: var(--sans);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --pink-soft: #3A1826;
+        --pink-tint: #24161D;
+        --bg: #120E14;
+        --surface: #1C161F;
+        --text: #F6EEF2;
+        --muted: #B3A6B0;
+        --line: #F6EEF2;
+        --shadow: #E62058;
+        --field: #281D26;
+        --btn-bg: #E62058;
+        --btn-fg: #FFFFFF;
+        color-scheme: dark;
+        --hero-bg: radial-gradient(circle at 88% 8%, rgba(230, 32, 88, .75) 0, transparent 45%),
+          radial-gradient(circle at 6% 100%, rgba(255, 106, 149, .35) 0, transparent 42%), #1B1320;
+        --ok: #5DCAA5;
+        --ok-soft: #13302A;
+        --warn: #FF8FB0;
+      }
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ===== App bar ===== */
+    .appbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: color-mix(in srgb, var(--bg) 82%, transparent);
+      backdrop-filter: blur(14px);
+      border-bottom: 2px solid var(--line);
+    }
+    .appbar-in {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 900;
+      font-size: 1.2rem;
+      letter-spacing: -0.03em;
+      flex: 1;
+      min-width: 0;
+    }
+    .brand b { color: var(--pink); }
+    .brand .mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 2px solid var(--line);
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    .for-pill {
+      font-size: 0.6rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      border: 2px solid var(--line);
+      border-radius: 99px;
+      padding: 1px 7px;
+      background: var(--surface);
+      white-space: nowrap;
+    }
+
+    /* ===== Hero ===== */
+    .hero {
+      background: var(--hero-bg);
+      border-radius: 0 0 36px 36px;
+      padding: 26px 16px 84px;
+    }
+    .hero-in { max-width: 1280px; margin: 0 auto; }
+    .catch {
+      font-size: clamp(1.45rem, 4.6vw, 2rem);
+      font-weight: 900;
+      line-height: 1.35;
+      letter-spacing: -0.01em;
+      margin: 4px 0 8px;
+    }
+    .catch em {
+      font-style: normal;
+      background: var(--pink);
+      color: #fff;
+      padding: 0 0.3em;
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+    .catch .nw { white-space: nowrap; }
+    .lead { font-size: 0.8rem; font-weight: 500; color: var(--muted); }
+
+    /* ===== Layout ===== */
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 16px 60px;
+    }
+
+    /* ===== Card / Panel ===== */
+    .card {
+      background: var(--surface);
+      border: 2px solid var(--line);
+      border-radius: 26px;
+      padding: 18px;
+      margin-bottom: 24px;
+      box-shadow: 6px 6px 0 var(--shadow);
+      animation: cin .35s ease both;
+    }
+    .card.panel { position: relative; margin-top: -60px; }
+    @keyframes cin {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: none; }
+    }
+    .card-title {
+      font-size: 1.05rem;
+      font-weight: 900;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    /* ===== Form ===== */
+    /* XRPL Tax for Cryptact と同じ形: 左にウォレット一覧、右に期間と取得ボタン */
+    .form-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 220px;
+      gap: 10px;
+      align-items: stretch;
+    }
+    .form-side { display: flex; flex-direction: column; gap: 10px; }
+    .form-side .btn-primary { flex: 1; min-height: 52px; }
+    .lbl-hint { font-weight: 600; color: var(--muted); margin-left: 6px; }
+    /* 5件分の高さまで。6件目からは枠内でスクロール (取得ボタンが伸び続けないように) */
+    .wlist {
+      display: flex; flex-direction: column; gap: 6px; margin-top: 6px;
+      overflow-y: auto; overscroll-behavior: contain;
+      padding-right: 2px;
+    }
+    /* 1件1段 (名前・アドレス・削除)。Flare には宛先タグが無いので XRPL Tax より詰められる */
+    .wrow {
+      display: grid;
+      grid-template-columns: 170px minmax(0, 1fr) 30px;
+      align-items: center;
+      gap: 5px;
+      padding: 7px;
+      border: 2px solid var(--pink-soft);
+      border-radius: 12px;
+      background: var(--surface);
+    }
+    .form-group .wrow input {
+      min-width: 0;
+      border: 0;
+      border-radius: 8px;
+      background: var(--field);
+      color: var(--text);
+      padding: 6px 8px;
+      font: 700 0.78rem var(--mono);
+      outline: none;
+    }
+    .form-group .wrow input:focus { box-shadow: 0 0 0 2px var(--pink); }
+    .form-group .wrow input.bad { box-shadow: 0 0 0 2px var(--warn); }
+    .form-group .wrow input.wl { grid-column: 1; grid-row: 1; font-family: var(--sans); }
+    .wrow .wa { grid-column: 2; grid-row: 1; }
+    .wrow .wd {
+      grid-column: 3; grid-row: 1;
+      align-self: stretch;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      font: 900 0.9rem var(--sans);
+      cursor: pointer;
+    }
+    .wrow .wd:hover { background: var(--pink); color: #fff; }
+    .wbtns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .mini {
+      border: 2px solid var(--line);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 5px 10px;
+      font: 800 0.7rem var(--sans);
+      cursor: pointer;
+    }
+    .form-group label.mini { display: inline-block; margin: 0; font-size: 0.7rem; color: var(--text); }
+    .mini:hover, .form-group label.mini:hover { border-color: var(--pink); color: var(--pink); }
+    .mini:disabled { opacity: 0.4; cursor: not-allowed; }
+    /* 履歴ファイル (取得を速くする) */
+    .hist-box { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+    .hist-box label.mini { display: inline-block; margin: 0; }
+    .hist-box label.mini:hover { border-color: var(--pink); color: var(--pink); }
+    .hist-loaded { font-size: 0.74rem; font-weight: 700; color: var(--text); display: inline-flex; align-items: center; gap: 6px; }
+    .hist-refresh { font-size: 0.72rem; font-weight: 500; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+    .hist-plan { margin-top: 8px; font-size: 0.74rem; color: var(--muted); line-height: 1.7; }
+    .hist-plan:empty { display: none; }
+    .hist-plan div { padding-left: 1em; text-indent: -1em; }
+    .hist-plan div::before { content: "・"; }
+    .hist-plan .ng { color: var(--text); font-weight: 700; }
+    .hist-band { display: none; margin: 0 0 20px; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; font-weight: 700; color: var(--text); }
+    .hist-band.visible { display: flex; }
+    .hist-band .mini.main { border-color: var(--pink); color: var(--pink); }
+    .form-group {
+      background: var(--field);
+      border-radius: 16px;
+      padding: 10px 14px;
+      border: 2px solid transparent;
+      transition: border-color .15s;
+      min-width: 0;
+    }
+    .form-group:focus-within,
+    .form-group:hover { border-color: var(--pink); }
+    .form-group label {
+      display: block;
+      font-size: 0.68rem;
+      font-weight: 800;
+      color: var(--pink);
+      margin-bottom: 4px;
+    }
+    .form-group input {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      font: 800 1rem var(--sans);
+      font-variant-numeric: tabular-nums;
+      outline: none;
+    }
+    .form-group input#wallet { font: 700 0.92rem var(--mono); letter-spacing: 0.01em; }
+    .form-group input::placeholder { color: var(--muted); opacity: 0.55; font-weight: 700; }
+    .form-group input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; }
+
+    .note-box {
+      background: var(--pink-tint);
+      border-radius: 16px;
+      padding: 10px 14px;
+      margin-top: 12px;
+      font-size: 0.74rem;
+      font-weight: 500;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .note-box strong { color: var(--text); font-weight: 800; }
+
+    /* ===== Buttons ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      padding: 12px 18px;
+      border: 2px solid var(--line);
+      border-radius: 16px;
+      font: 900 0.88rem var(--sans);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: transform .1s, box-shadow .1s;
+    }
+    .btn:active { transform: translate(2px, 2px); box-shadow: none; }
+    .btn-primary { background: var(--btn-bg); color: var(--btn-fg); padding: 12px 24px; }
+    .btn-primary:hover { box-shadow: 4px 4px 0 var(--pink); }
+    @media (prefers-color-scheme: dark) { .btn-primary:hover { box-shadow: 4px 4px 0 var(--line); } }
+    .btn-primary:disabled { opacity: 0.7; cursor: wait; box-shadow: none; }
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 4px 4px 0 var(--shadow);
+    }
+    .btn-secondary:hover { background: var(--pink-soft); }
+
+    /* ===== Stats ===== */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    /* 結果の表示なので、ボタンに見えないよう枠や背景は付けず、区切り線だけで並べる */
+    .stat-item {
+      padding: 4px 18px;
+      border-left: 2px solid var(--pink-soft);
+    }
+    .stat-item:first-child { border-left: 0; padding-left: 4px; }
+    .stat-item .stat-value {
+      font-size: 2.2rem;
+      font-weight: 900;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.03em;
+    }
+    .stat-item .stat-label {
+      font-size: 0.68rem;
+      font-weight: 800;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+    .stat-export .stat-value { color: var(--ok); }
+    /* 要確認は残っているときだけ色を付ける (0件なら他と同じ控えめな表示) */
+    .stat-review .stat-value { color: var(--muted); }
+    .stat-review.has-items .stat-value { color: var(--pink); }
+    .stat-skip .stat-value { color: var(--muted); }
+
+    /* ===== details / summary (アコーディオン) ===== */
+    details > summary { list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    .sub-details {
+      margin-top: 14px;
+      border: 2px dashed var(--pink);
+      border-radius: 16px;
+      padding: 10px 14px;
+      background: var(--pink-tint);
+    }
+    .sub-details > summary {
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 900;
+      color: var(--text);
+    }
+    .sub-details > summary::after { content: " ▸"; color: var(--pink); }
+    .sub-details[open] > summary::after { content: " ▾"; }
+
+    /* ===== Tabs (セグメント) ===== */
+    .tabs {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      border: 2px solid var(--line);
+      border-radius: 99px;
+      background: var(--surface);
+    }
+    .tab-btn {
+      border: 0;
+      border-radius: 99px;
+      padding: 7px 14px;
+      background: transparent;
+      color: var(--muted);
+      font: 800 0.82rem var(--sans);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { background: var(--pink); color: #fff; }
+    .tab-count {
+      font: 700 0.7rem var(--mono);
+      padding: 0 7px;
+      border-radius: 99px;
+      background: var(--pink-soft);
+      color: var(--pink);
+    }
+    .tab-btn.active .tab-count { background: rgba(255, 255, 255, 0.25); color: #fff; }
+
+    /* ===== Toolbar ===== */
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .tx-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    /* 固定する操作バーは1行に収まるよう、ボタンを小さめにする */
+    .tx-actions .btn { padding: 8px 14px; font-size: 0.78rem; box-shadow: 3px 3px 0 var(--shadow); }
+    /* 絞り込み (ウォレットのチップ・検索) は左、WFLR のチェックは右。狭ければ折り返す。絞り込みは表示だけで CSV には影響しない */
+    .tx-opts { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px 16px; margin: -2px 0 10px; }
+    .tx-opts .opt-label { margin-left: auto; padding-top: 5px; }
+    .tx-filter { display: flex; flex-direction: column; gap: 6px; flex: 1 1 320px; min-width: 0; }
+    .tx-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+    .wchips { display: contents; }
+    .wchip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      max-width: 100%;
+      border: 2px solid var(--line);
+      border-radius: 99px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 3px 10px;
+      font: 800 0.72rem var(--sans);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .wchip:hover { border-color: var(--pink); color: var(--pink); }
+    .wchip.active { background: var(--pink); border-color: var(--pink); color: #fff; }
+    .wchip .wchip-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+    .wchip .wchip-n { font: 700 0.68rem var(--mono); color: var(--muted); }
+    .wchip .wchip-r { color: var(--pink); font-weight: 900; }
+    .wchip.active .wchip-n { color: rgba(255, 255, 255, 0.85); }
+    .wchip.active .wchip-r { color: #fff; }
+    .tx-search, .lb-filter { position: relative; flex: 1 1 220px; max-width: 360px; }
+    .tx-search input, .lb-filter input {
+      width: 100%;
+      border: 2px solid var(--line);
+      border-radius: 99px;
+      background: var(--field);
+      color: var(--text);
+      padding: 5px 30px 5px 12px;
+      font: 700 0.76rem var(--sans);
+      outline: none;
+    }
+    .tx-search input:focus, .lb-filter input:focus { border-color: var(--pink); }
+    .tx-search input::placeholder, .lb-filter input::placeholder { color: var(--muted); opacity: 0.7; font-weight: 600; }
+    .tx-search .x, .lb-filter .x {
+      position: absolute;
+      right: 5px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 22px;
+      height: 22px;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--muted);
+      font: 900 0.9rem var(--sans);
+      cursor: pointer;
+    }
+    .tx-search .x:hover, .lb-filter .x:hover { background: var(--pink); color: #fff; }
+    .tx-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 0.72rem; font-weight: 800; color: var(--warn); }
+    .tx-scope[hidden] { display: none; }
+    .tx-empty td { text-align: center; color: var(--muted); font-weight: 700; padding: 22px 12px !important; white-space: normal; }
+    /* 取引履歴の中にいる間だけ、操作バーと表の見出しをヘッダーの下に固定する。
+       スクロールはページ全体の1つにまとめる (表の中のスクロールは使わない)。
+       操作バーは PC の幅なら常に固定 (tx-bar-sticky)。表の見出しは表が横にはみ出さないときだけ
+       ページに合わせて固定し (tx-sticky)、はみ出すときは従来どおり表の中でスクロールする */
+    .tx-bar-sticky .tx-toolbar {
+      position: sticky;
+      top: var(--appbar-h, 64px);
+      z-index: 5;
+      background: var(--surface);
+      margin: -10px 0 2px;
+      padding: 10px 0;
+    }
+    .tx-sticky .tx-wrap { max-height: none; overflow: clip; }
+    .tx-sticky .tx-wrap thead th { top: calc(var(--appbar-h, 64px) + var(--txbar-h, 64px)); z-index: 4; }
+    .opt-label {
+      font-size: 0.76rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .opt-label input { accent-color: var(--pink); width: 16px; height: 16px; }
+
+    /* ===== Table ===== */
+    .table-wrapper {
+      overflow-x: auto;
+      border: 2px solid var(--line);
+      border-radius: 18px;
+      max-height: 72vh;
+      overflow-y: auto;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--pink-tint);
+      color: var(--muted);
+      font-size: 0.66rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 2px solid var(--line);
+      white-space: nowrap;
+    }
+    tbody td {
+      padding: 9px 12px;
+      border-bottom: 1.5px solid var(--pink-soft);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: var(--pink-tint); }
+    tr.row-review td:first-child { box-shadow: inset 4px 0 0 var(--pink); }
+    tr.row-skip td { color: var(--muted); }
+
+    /* Status badge (pill) */
+    .status-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: 0.64rem;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      border: 1.5px solid transparent;
+      white-space: nowrap;
+      /* 「出力」「要確認」「スキップ」で幅が変わらないようにそろえる */
+      min-width: 68px;
+      text-align: center;
+    }
+    .status-export { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+    .status-review { background: var(--pink); color: #fff; }
+    .status-skip { background: transparent; color: var(--muted); border: 1.5px dashed var(--muted); }
+    .status-scam { background: var(--muted); color: var(--bg); }
+    /* SCAM の行は取り消し線ではなく薄くして目立たなくする (状態バッジのセルだけは読めるまま)。
+       取り消し線だと「取り消された行」に見えてしまい、詐欺の疑いという意味が伝わらない */
+    tr.row-scam td { color: var(--muted); }
+    tr.row-scam td:not(:nth-child(2)) { opacity: 0.45; }
+    tr.row-scam .tx-link { color: var(--muted); }
+    tbody tr.row-scam:hover { background: transparent; }
+
+    .row-check { width: 16px; height: 16px; accent-color: var(--pink); cursor: pointer; }
+
+    .action-select {
+      background: var(--field);
+      color: var(--text);
+      border: 2px solid transparent;
+      padding: 5px 8px;
+      border-radius: 10px;
+      font: 800 0.76rem var(--sans);
+      cursor: pointer;
+      outline: none;
+    }
+    .action-select:focus, .action-select:hover { border-color: var(--pink); }
+
+    .sym-input {
+      width: 120px;
+      background: var(--field);
+      color: var(--text);
+      border: 2px solid transparent;
+      border-radius: 10px;
+      padding: 4px 8px;
+      font: 700 0.76rem var(--mono);
+      outline: none;
+    }
+    .sym-input:focus, .sym-input:hover { border-color: var(--pink); }
+    .settings-row { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+    .btn-mini { padding: 7px 12px; font-size: 0.74rem; box-shadow: 3px 3px 0 var(--shadow); }
+
+    .tx-link { color: var(--pink); font: 700 0.74rem var(--mono); text-decoration: none; }
+    .tx-link:hover { text-decoration: underline; }
+
+    .comment-cell { font-size: 0.74rem; font-weight: 500; white-space: normal !important; min-width: 240px; max-width: 420px; line-height: 1.45; overflow-wrap: anywhere; }
+
+    /* 取引一覧: PC の幅で横スクロールせずに全列が見えるように詰める (CSV の値はデータ側なので影響なし) */
+    #txTable thead th, #txTable tbody td { padding-left: 9px; padding-right: 9px; }
+    #txTable .c-date { white-space: normal; line-height: 1.35; }
+    /* 1000px 前後のノートPCの幅でも横にはみ出さず、見出しを固定できるようにコメント列を細くする */
+    @media (max-width: 1180px) { #txTable .comment-cell { min-width: 150px; } }
+    #txTable .c-date span { color: var(--muted); font-size: 0.7rem; }
+    /* どのウォレットの行か (登録ウォレットが2件以上のときだけ)。幅を広げないよう長い名前は省略する */
+    #txTable .wtag {
+      display: block;
+      width: fit-content;
+      max-width: 84px;
+      margin-top: 3px;
+      padding: 0 7px;
+      border: 1.5px solid var(--muted);
+      border-radius: 99px;
+      color: var(--muted);
+      font-size: 0.66rem;
+      font-weight: 700;
+      line-height: 1.5;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* コメント欄の補足行 (相手先・円価格・警告) */
+    .cm-sub { font-size: 0.7rem; color: var(--muted); }
+    .cm-jpy { font-size: 0.7rem; color: var(--ok); font-weight: 700; }
+    .cm-warn { font-size: 0.7rem; color: var(--warn); font-weight: 800; }
+    #txTable .c-num { text-align: right; }
+    #txTable .c-num b { font-weight: 800; margin-left: 3px; }
+    /* 長いトークン名 (PT-stXRP(FXRP)-2026/08/27 など) で列が広がり、表が横にはみ出すのを防ぐ。
+       幅が足りないときだけ、数量とトークン名の間で折り返す (数量・名前の途中では折らない) */
+    #txTable td.c-num:not(.c-fee) { white-space: normal; }
+    #txTable td.c-num:not(.c-fee) span { white-space: nowrap; }
+    #txTable td.c-num:not(.c-fee) b { display: inline-block; max-width: 170px; white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+    @media (max-width: 1180px) { #txTable td.c-num:not(.c-fee) b { max-width: 110px; } #txTable .wtag { max-width: 74px; } }
+    #txTable .c-fee { color: var(--muted); font-size: 0.72rem; }
+    #txBody .action-select { width: 96px; }
+
+    /* ===== Loader ===== */
+    .loader {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 18px 20px;
+      margin-bottom: 24px;
+      border: 2px dashed var(--pink);
+      border-radius: 20px;
+      background: var(--pink-tint);
+      font-size: 0.84rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .loader.active { display: flex; }
+    .spinner {
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+      border: 3px solid var(--pink-soft);
+      border-top-color: var(--pink);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ===== Messages ===== */
+    .error-msg, .warn-box {
+      display: none;
+      margin-bottom: 20px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 2px solid var(--pink);
+      background: var(--pink-soft);
+      color: var(--warn);
+      font-size: 0.8rem;
+      font-weight: 700;
+      line-height: 1.6;
+      white-space: pre-line;
+    }
+    .error-msg.visible { display: block; }
+
+    /* ===== Empty state ===== */
+    .empty-state {
+      text-align: center;
+      padding: 28px;
+      border: 2px dashed var(--pink);
+      border-radius: 26px;
+      background: var(--pink-tint);
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .empty-state .icon { font-size: 2.2rem; margin-bottom: 6px; }
+
+    /* ===== ページ切り替え (ヘッダーのタブ) ===== */
+    .appbar-in { flex-wrap: wrap; }
+    .navtabs {
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
+      border: 2px solid var(--line);
+      border-radius: 99px;
+      background: var(--surface);
+      max-width: 100%;
+      overflow-x: auto;
+    }
+    /* PC の幅では少し大きくして、今どのページにいるかを分かりやすくする (640px 以下は下で元の大きさに戻す) */
+    .nav-btn {
+      border-radius: 99px;
+      padding: 7px 16px;
+      color: var(--muted);
+      font: 800 0.82rem var(--sans);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .nav-btn:hover { color: var(--text); }
+    .nav-btn.active { background: var(--pink); color: #fff; }
+    /* 狭い画面ではロゴの下の段に回す */
+    @media (max-width: 640px) {
+      .appbar-in { row-gap: 8px; }
+      .navtabs { width: 100%; justify-content: space-between; }
+      .nav-btn { padding: 5px 12px; font-size: 0.76rem; }
+    }
+
+    /* ===== 説明ページ ===== */
+    /* 本文 (左) + 目次 (右) の2カラム。幅は本文が残りを使う */
+    .doc-layout { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 24px; align-items: start; }
+    .doc { font-size: 0.86rem; line-height: 1.85; min-width: 0; }
+    .doc h2, .doc h3 { scroll-margin-top: calc(var(--appbar-h, 64px) + 16px); }
+    .doc h2 {
+      font-size: 1.05rem;
+      font-weight: 900;
+      margin: 26px 0 8px;
+      padding-left: 10px;
+      border-left: 5px solid var(--pink);
+    }
+    .doc h2:first-child { margin-top: 4px; }
+    .doc h3 { font-size: 0.9rem; font-weight: 900; margin: 16px 0 4px; }
+    .doc p, .doc ul, .doc ol { margin: 6px 0; }
+    .doc ul, .doc ol { padding-left: 1.4em; }
+    .doc li { margin: 3px 0; }
+    .doc strong { font-weight: 800; }
+    .doc code { font: 700 0.8em var(--mono); background: var(--pink-tint); padding: 1px 5px; border-radius: 6px; }
+    .doc a { color: var(--pink); font-weight: 800; }
+    .doc .table-wrapper { max-height: none; margin: 8px 0; }
+    .doc tbody td { white-space: normal; vertical-align: top; min-width: 110px; }
+    .doc tbody td:first-child { font-weight: 800; }
+    .doc tbody tr:hover { background: transparent; }
+    .doc .note-box { font-size: 0.8rem; }
+
+    /* 目次 (JS が見出しから作る)。PC では画面に固定し、長ければ中でスクロール */
+    .doc-toc {
+      position: sticky;
+      top: calc(var(--appbar-h, 64px) + 16px);
+      margin-top: -60px;
+      max-height: calc(100vh - var(--appbar-h, 64px) - 32px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      background: var(--surface);
+      border: 2px solid var(--line);
+      border-radius: 20px;
+      padding: 14px 10px 10px;
+    }
+    .doc-toc summary {
+      pointer-events: none;
+      padding: 0 8px 8px;
+      margin-bottom: 6px;
+      border-bottom: 2px solid var(--pink-soft);
+      font-size: 0.9rem;
+    }
+    .doc-toc summary .toc-name { font-weight: 900; }
+    .doc-toc summary .toc-label { display: none; color: var(--muted); font-weight: 800; }
+    .doc-toc ul { list-style: none; display: flex; flex-direction: column; gap: 1px; }
+    .toc-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: 0;
+      border-left: 3px solid transparent;
+      border-radius: 0 8px 8px 0;
+      padding: 5px 8px 5px 10px;
+      color: var(--muted);
+      font: 700 0.76rem/1.45 var(--sans);
+      cursor: pointer;
+    }
+    .toc-item:hover { color: var(--text); background: var(--pink-tint); }
+    .toc-item.active { color: var(--text); font-weight: 900; border-left-color: var(--pink); background: var(--pink-tint); }
+    .doc-toc li.sub .toc-item { padding-left: 22px; font-size: 0.72rem; font-weight: 600; }
+    .doc-toc li.sub .toc-item.active { font-weight: 800; }
+    @media (max-width: 1000px) {
+      /* 狭い画面: 1カラムに戻し、目次は本文の上に固定なしで置く (開閉できる。項目は折り返すチップ) */
+      .doc-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
+      .doc-layout > .card.panel { margin-top: 0; }
+      .doc-toc { order: -1; position: static; max-height: none; overflow: visible; margin-bottom: 16px; padding: 10px 14px; }
+      .doc-toc summary { pointer-events: auto; cursor: pointer; padding: 0; margin: 0; border: 0; }
+      .doc-toc summary::after { content: " ▸"; color: var(--pink); }
+      .doc-toc details[open] > summary { margin-bottom: 8px; }
+      .doc-toc details[open] > summary::after { content: " ▾"; }
+      .doc-toc summary .toc-label { display: inline; }
+      .doc-toc ul { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+      .toc-item { width: auto; border: 2px solid var(--pink-soft); border-radius: 99px; padding: 3px 10px; }
+      .toc-item.active { border-color: var(--pink); }
+      .doc-toc li.sub .toc-item { padding-left: 10px; }
+    }
+
+    /* 対応サービスと取引の種類 (カード一覧) */
+    .svc-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0 4px; font-size: 0.8rem; }
+    .svc-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+    .doc h3.svc-cat { margin: 18px 0 8px; }
+    .svc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+    .svc-card {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      border: 2px solid var(--line);
+      border-radius: 18px;
+      background: var(--surface);
+      padding: 12px 14px 10px;
+      line-height: 1.5;
+    }
+    .svc-name { font-size: 0.92rem; font-weight: 900; }
+    .svc-name small { color: var(--muted); font-size: 0.72rem; font-weight: 700; margin-left: 4px; }
+    .doc .svc-rows { list-style: none; padding: 0; margin: 2px 0 4px; }
+    .doc .svc-rows li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      padding: 4px 0;
+      border-bottom: 1.5px solid var(--pink-soft);
+      font-size: 0.78rem;
+    }
+    .doc .svc-rows li:last-child { border-bottom: 0; }
+    .svc-pills { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; flex-shrink: 0; }
+    .doc .svc-note { margin: -4px 0 8px; font-size: 0.78rem; color: var(--muted); }
+    .status-badge.mono { font-family: var(--mono); letter-spacing: 0; }
+    /* カードのピルは DEFIFEE・差分計上 など長めの語も入るので、その幅にそろえる */
+    .svc-pills .status-badge { min-width: 76px; }
+    .svc-go {
+      margin-top: auto;
+      align-self: flex-start;
+      padding: 2px 0;
+      border: 0;
+      background: none;
+      color: var(--pink);
+      font: 800 0.74rem var(--sans);
+      cursor: pointer;
+    }
+    .svc-go:hover { text-decoration: underline; }
+
+    /* コメントの区分け一覧: 絞り込みと、表の見た目 */
+    .lb-filter { margin: 10px 0 6px; max-width: 420px; }
+    .lb-none { margin: 10px 0; font-weight: 800; color: var(--muted); }
+    .doc .lb-grp { color: var(--pink); font-weight: 900; }
+    /* 区分け一覧の表: どの表も同じ列幅にする (中身の長さで列がずれないよう固定レイアウト) */
+    .doc table.lb-table { table-layout: fixed; min-width: 660px; }
+    .lb-table th:nth-child(1) { width: 31%; }
+    .lb-table th:nth-child(2) { width: 150px; }
+    .lb-table th:nth-child(3) { width: 96px; }
+    .doc .lb-table tbody td { min-width: 0; overflow-wrap: anywhere; }
+    .csv-kind { font: 700 0.78rem var(--mono); }
+    .csv-none { color: var(--muted); }
+    .csv-note { font-size: 0.74rem; color: var(--muted); }
+
+    /* ===== Footer ===== */
+    .foot { margin-top: 20px; text-align: center; font-size: 0.74rem; color: var(--muted); line-height: 1.8; }
+    .foot a { color: var(--pink); font-weight: 800; text-decoration: none; }
+    .foot a:hover { text-decoration: underline; }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 900px) {
+      .form-grid { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); row-gap: 14px; }
+      .stat-item:nth-child(odd) { border-left: 0; padding-left: 4px; }
+    }
+    @media (max-width: 540px) {
+      .form-grid { grid-template-columns: 1fr; }
+      /* スマホ幅では名前とアドレスを2段に */
+      .wrow { grid-template-columns: minmax(0, 1fr) 30px; }
+      .form-group .wrow input.wl { grid-column: 1; grid-row: 1; }
+      .wrow .wa { grid-column: 1; grid-row: 2; }
+      .wrow .wd { grid-column: 2; grid-row: 1 / 3; }
+      .card { padding: 14px; }
+      .tabs { width: 100%; overflow-x: auto; }
+    }
+
+    /* ===== 限定公開のロック画面 (簡易的な鍵。gate.json がある公開環境でだけ有効) ===== */
+    html.gate-check body > *:not(.gate) { visibility: hidden; }
+    body.gated > *:not(.gate) { display: none !important; }
+    .gate { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: var(--hero-bg); }
+    .gate[hidden] { display: none; }
+    .gate-card { width: 100%; max-width: 400px; background: var(--surface); border: 2px solid var(--line); border-radius: 26px; padding: 26px 22px; box-shadow: 6px 6px 0 var(--shadow); text-align: center; }
+    .gate-title { font-weight: 900; font-size: 1.2rem; margin-bottom: 6px; }
+    .gate-text { font-size: 0.8rem; color: var(--muted); line-height: 1.7; margin-bottom: 14px; }
+    .gate-card input { width: 100%; background: var(--field); border: 2px solid transparent; border-radius: 14px; padding: 12px 14px; color: var(--text); font: 800 1rem var(--sans); text-align: center; outline: none; }
+    .gate-card input:focus { border-color: var(--pink); }
+    .gate-err { min-height: 1.4em; margin: 8px 0 0; font-size: 0.76rem; font-weight: 700; color: var(--warn); }
+    .gate-card .btn { margin-top: 6px; width: 100%; }
+  </style>
+</head>
+
+<body>
+  <div class="gate" id="gate" hidden>
+    <form class="gate-card" id="gateForm" autocomplete="off">
+      <p class="gate-title">限定公開中です</p>
+      <p class="gate-text">アクセスコードを入力してください。一度入力すると、この端末では次回から省略されます。</p>
+      <input type="text" id="gateInput" placeholder="アクセスコード" aria-label="アクセスコード" autocapitalize="off" spellcheck="false">
+      <p class="gate-err" id="gateErr"></p>
+      <button class="btn btn-primary" type="submit">開く →</button>
+    </form>
+  </div>
+  <div class="appbar"><div class="appbar-in">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 32 32" width="36" height="36" aria-hidden="true"><rect x="6" y="2.6" width="20" height="26.8" rx="4.4" fill="#E62058" stroke="var(--line)" stroke-width="1.8"/><rect x="9" y="5.6" width="14" height="7.6" rx="1.8" fill="#FFD6E1" stroke="var(--line)" stroke-width="1.3"/><path d="M13.6 8.1H20.6M15.8 10.7H20.6" stroke="#B3134A" stroke-width="1.5" stroke-linecap="round"/><circle cx="11.6" cy="10.7" r="0.95" fill="#B3134A"/><g fill="#FFFFFF" stroke="var(--line)" stroke-width="1.2"><rect x="8.8" y="15.6" width="3.8" height="3.2" rx="1"/><rect x="14.1" y="15.6" width="3.8" height="3.2" rx="1"/><rect x="19.4" y="15.6" width="3.8" height="3.2" rx="1"/><rect x="8.8" y="20.4" width="3.8" height="3.2" rx="1"/><rect x="14.1" y="20.4" width="3.8" height="3.2" rx="1"/><rect x="8.8" y="25.2" width="9.1" height="2.4" rx="1"/></g><rect x="19.4" y="20.4" width="3.8" height="7.2" rx="1" fill="#FFD6E1" stroke="var(--line)" stroke-width="1.2"/><path d="M20.4 23.2H22.2M20.4 24.8H22.2" stroke="#B3134A" stroke-width="1.1" stroke-linecap="round"/></svg>
+      <span>Flare <b>Tax</b></span>
+      <span class="for-pill">for Cryptact</span>
+    </div>
+    <nav class="navtabs" aria-label="ページ">
+      <a class="nav-btn" href="#tool" data-page="tool">ツール</a>
+      <a class="nav-btn" href="#guide" data-page="guide">使い方</a>
+      <a class="nav-btn" href="#concepts" data-page="concepts">区分けの考え方</a>
+      <a class="nav-btn" href="#disclaimer" data-page="disclaimer">免責事項</a>
+    </nav>
+  </div></div>
+
+  <div class="page" id="page-tool">
+  <header class="hero">
+    <div class="hero-in">
+      <h1 class="catch">Flareの取引履歴を、<br><em>クリプタクト用CSV</em><span class="nw">に仕訳する。</span></h1>
+      <p class="lead">ウォレットの全履歴を自動で分類。LP・レンディングは差分計上で、損益に関わる行だけを出力します。</p>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Input Form -->
+    <div class="card panel">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>ウォレット <span class="lbl-hint">最大20件・このブラウザに保存</span></label>
+          <div class="wlist" id="wlist"></div>
+          <div class="wbtns">
+            <button type="button" class="mini" id="wAdd" onclick="addWallet()">＋ 追加</button>
+            <button type="button" class="mini" onclick="exportSettings()"
+              title="ウォレット・トークン設定・アドレス帳をJSONファイルに保存します（別のブラウザ・PCへの引っ越し用）">💾 ウォレットをファイルに保存</button>
+            <label class="mini" title="保存したJSONファイルからウォレット・設定を復元します">📂 ファイルから読み込む
+              <input type="file" accept="application/json,.json" hidden onchange="importSettings(this)"></label>
+          </div>
+        </div>
+        <div class="form-side">
+          <div class="form-group">
+            <label for="startDate">開始日</label>
+            <input type="date" id="startDate">
+          </div>
+          <div class="form-group">
+            <label for="endDate">終了日</label>
+            <input type="date" id="endDate">
+          </div>
+          <button class="btn btn-primary" id="fetchBtn" onclick="fetchTransactions()">
+            <span id="fetchBtnText">取引を取得する →</span>
+          </button>
+        </div>
+      </div>
+      <div class="hist-box">
+        <label class="mini" title="前回保存した履歴ファイルを選ぶと、その続き（新しい取引）だけを取得するので速くなります">📂 履歴ファイルを読み込む
+          <input type="file" id="histFile" accept=".gz,application/gzip" hidden onchange="loadHistoryFile(this)"></label>
+        <span class="hist-loaded" id="histLoaded" style="display:none;">
+          <span id="histLoadedText"></span>
+          <button type="button" class="mini" onclick="clearHistoryFile()" title="読み込んだ履歴ファイルを外します" aria-label="履歴ファイルを外す">×</button>
+        </span>
+        <label class="hist-refresh" id="histRefreshWrap" style="display:none;">
+          <input type="checkbox" id="histRefresh" onchange="renderHistPlan()"> 全履歴を取り直す（履歴ファイルを使わない）</label>
+      </div>
+      <div class="hist-plan" id="histPlan" aria-live="polite"></div>
+      <p class="note-box">
+        登録したウォレット（Smart Account を含む）を<strong>同じ持ち主としてまとめて</strong>読み込みます。ウォレット間の移動は送金として扱い、CSVには出しません。
+        開始日・終了日は<strong>出力CSVの絞り込み</strong>です。LPや貸付の元本（過去の預入）を正しく計算するため、計算は常に全履歴が対象です（初回は数分かかります。<strong>履歴ファイル</strong>を保存して次回読み込むと、新しい分だけ取得するので数秒〜数十秒で済みます）。
+      </p>
+    </div>
+
+    <!-- Error -->
+    <div class="error-msg" id="errorMsg"></div>
+
+    <!-- Warnings (データ欠落の可能性など) -->
+    <div id="warningMsg" class="warn-box"></div>
+
+    <!-- 履歴ファイルの保存 (取得後) -->
+    <div class="note-box hist-band" id="histBand">
+      <span id="histBandText"></span>
+      <button type="button" class="mini" id="histSaveBtn" onclick="saveHistoryFile()">💾 最新の履歴ファイルを保存</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="card" id="statsCard" style="display:none;">
+      <div class="card-title">📊 集計</div>
+      <div class="stats-grid">
+        <div class="stat-item stat-total">
+          <div class="stat-value" id="statTotal">0</div>
+          <div class="stat-label">取得件数</div>
+        </div>
+        <div class="stat-item stat-export">
+          <div class="stat-value" id="statExport">0</div>
+          <div class="stat-label">出力対象</div>
+        </div>
+        <div class="stat-item stat-skip">
+          <div class="stat-value" id="statSkip">0</div>
+          <div class="stat-label">スキップ</div>
+          <div style="font-size: 0.65rem; color: var(--clr-text-muted); margin-top: 5px;" id="statSkipGas">（ガス代: 0 FLR）
+          </div>
+        </div>
+        <div class="stat-item stat-review">
+          <div class="stat-value" id="statReview">0</div>
+          <div class="stat-label">要確認</div>
+        </div>
+      </div>
+      <details class="sub-details">
+        <summary>
+          🪙 トークン設定（クリプタクトでの扱い）<span id="tokenCount"></span>
+        </summary>
+        <p class="note-box" style="background: var(--surface); margin: 10px 0;">
+          トークンごとに、クリプタクトでの扱いを3つから選びます。
+          <strong>カスタム</strong>＝クリプタクトに無いトークン（CSVでは <code>USER-…</code> で出力。円価格はこのツールが付けます）、
+          <strong>対応コイン・価格あり</strong>＝価格欄は空欄でクリプタクトの価格を使用（決済通貨にもできます）、
+          <strong>対応コイン・価格なし</strong>＝銘柄はあるが価格データが無い（<code>USER-</code>なし。円価格はこのツールが付けます）。
+          調べた結果はこのブラウザに保存され、次回から「✓ 確認済み（自分）」になります。よく使うトークンは確認済みとして組み込んであります。
+          未確認のトークンは<a href="https://grid.cryptact.com/coins" target="_blank" rel="noopener" style="color: var(--pink); font-weight: 800;">クリプタクトの対応コインリスト</a>で確認してください。
+        </p>
+        <div class="table-wrapper" style="max-height: 60vh;">
+          <table>
+            <thead>
+              <tr><th>トークン</th><th>コントラクト</th><th>出力/要確認</th><th>クリプタクトでの扱い</th><th>CSVでの表記</th><th>確認</th></tr>
+            </thead>
+            <tbody id="tokenBody"></tbody>
+          </table>
+        </div>
+      </details>
+    </div>
+
+    <!-- LP Positions (アコーディオン、デフォルト閉) -->
+    <div class="card" id="lpCard" style="display:none; padding: 0;">
+      <details id="lpDetails">
+        <summary style="cursor: pointer; padding: 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+          <span class="card-title" style="margin: 0;">📒 オープンポジション台帳（LP・レンディングなど） <span id="lpSummaryCount" style="text-transform: none;"></span></span>
+          <span style="font-size: 0.75rem; color: var(--clr-text-muted);">クリックで開閉 ▾</span>
+        </summary>
+        <div style="padding: 0 18px 18px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 12px; margin-bottom: 10px;">
+            <p style="font-size:0.75rem; color: var(--clr-text-muted); margin: 0;">
+              <strong>運用中</strong> = 元本がまだプールに残っている（またはLPトークン保有中）。「残元本」はプール内の取得原価です。<br>
+              <strong>清算済み</strong> = 全て引き出して残高が0に戻り、差益(BONUS)・差損(LOSS)の精算まで完了。過去の記録として残ります（デフォルト非表示）。<br>
+              元本の出し入れ（LEND/RECOVER）は損益ゼロなのでCSVには出力されません（スキップ）。
+              ツールが算出した<strong>差益・差損・利息の行だけ</strong>が出力対象です。借入（BORROW/RETURN）のみ在庫整合のため出力します。
+            </p>
+            <button class="btn btn-secondary" onclick="downloadLpCSV()" style="font-size:0.75rem; flex-shrink: 0;">📥 台帳CSV</button>
+          </div>
+          <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 10px; font-size: 0.78rem;">
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+              <input type="checkbox" id="showClosed" onchange="renderLpTable()"> 清算済みも表示する
+            </label>
+            <span id="lpExcludedInfo" style="color: var(--clr-text-muted);"></span>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>状態</th><th>プール</th><th>預入累計</th><th>回収元本</th><th>残元本</th>
+                  <th>実現差益</th><th>実現差損</th><th>取引数</th><th>期間</th><th>管理</th>
+                </tr>
+              </thead>
+              <tbody id="lpBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Results -->
+    <div class="card" id="resultsCard" style="display:none;">
+      <div class="toolbar tx-toolbar" id="txToolbar">
+        <div class="tabs" style="flex-wrap: wrap;">
+          <button class="tab-btn active" data-filter="all" onclick="setTab(this)">
+            すべて<span class="tab-count" id="tabAll">0</span>
+          </button>
+          <button class="tab-btn" data-filter="export" onclick="setTab(this)">
+            出力対象<span class="tab-count" id="tabExport">0</span>
+          </button>
+          <button class="tab-btn" data-filter="skip" onclick="setTab(this)">
+            スキップ<span class="tab-count" id="tabSkip">0</span>
+          </button>
+          <button class="tab-btn" data-filter="review" onclick="setTab(this)">
+            要確認<span class="tab-count" id="tabReview">0</span>
+          </button>
+          <button class="tab-btn" data-filter="scam" onclick="setTab(this)">
+            SCAM<span class="tab-count" id="tabScam">0</span>
+          </button>
+        </div>
+        <div class="tx-actions">
+          <span id="selCount" style="font-size: 0.74rem; font-weight: 800; color: var(--muted);"></span>
+          <button class="btn btn-secondary" onclick="downloadCSV()">
+            📥 CSVダウンロード
+          </button>
+        </div>
+      </div>
+      <div class="tx-opts">
+        <!-- ウォレットのチップは複数のウォレットに行があるときだけ JS が出す。検索欄は描き直さない (入力中のフォーカスを保つため) -->
+        <div class="tx-filter">
+          <div class="tx-filter-row">
+            <div class="wchips" id="walletChips"></div>
+            <div class="tx-search">
+              <input type="text" id="txSearch" placeholder="検索（トークン・コメント・Tx・相手先）" aria-label="取引を検索" autocomplete="off" spellcheck="false">
+              <button type="button" class="x" id="txSearchClear" aria-label="検索を解除" hidden>×</button>
+            </div>
+          </div>
+          <div class="tx-scope" id="txScope" hidden>
+            <span>表示を絞り込み中（CSV には全ウォレット分が出ます）</span>
+            <button type="button" class="mini" id="txScopeClear">絞り込みを解除</button>
+          </div>
+        </div>
+        <label class="opt-label">
+          <input type="checkbox" id="convertWflr" checked onchange="renderTokenTable()">
+          WFLRをFLRとして出力する（推奨）
+        </label>
+      </div>
+      <p class="note-box" style="margin: 0 0 12px;">
+        💡 送受金行の「↳ 相手」の<strong>登録</strong>から相手先アドレスに名前を付けられます（このブラウザにのみ保存・任意）。
+        「自分のウォレット」として登録すると、その相手との送受金は自動で送金扱い（スキップ・CSV対象外）になります。
+      </p>
+      <div class="table-wrapper tx-wrap">
+        <table id="txTable">
+          <thead>
+            <tr>
+              <th>出力</th>
+              <th>状態</th>
+              <th>日時</th>
+              <th>Action</th>
+              <th class="c-num">数量（Volume / Base）</th>
+              <th>Counter</th>
+              <th class="c-num">手数料</th>
+              <th>Comment</th>
+              <th>Tx</th>
+            </tr>
+          </thead>
+          <tbody id="txBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div class="loader" id="loader">
+      <div class="spinner"></div>
+      <span id="loaderText">Blockscout APIからデータを取得中...</span>
+    </div>
+
+    <!-- Empty State -->
+    <div class="empty-state" id="emptyState" style="display:none;">
+      <div class="icon">📭</div>
+      <p>取引が見つかりませんでした。</p>
+    </div>
+
+  </div>
+  </div>
+
+  <!-- ===== 使い方 ===== -->
+  <div class="page" id="page-guide" hidden>
+    <header class="hero">
+      <div class="hero-in">
+        <h1 class="catch">使い方</h1>
+        <p class="lead">ウォレットを登録して取得 → 一覧を確認 → CSVをクリプタクトに取り込む、の流れです。</p>
+      </div>
+    </header>
+    <div class="container doc-layout">
+      <div class="card panel doc">
+        <h2>1. ウォレットを登録する</h2>
+        <ul>
+          <li>名前とアドレスを登録します（最大20件、このブラウザに保存）。<strong>Flare Smart Accounts のアドレスも一緒に登録</strong>してください。</li>
+          <li>登録したアドレスはすべて同じ持ち主として扱います。アドレス間の移動は送金として、CSVには出しません。</li>
+          <li>「💾 ウォレットをファイルに保存」で、ウォレット・トークン設定・アドレス帳を別のブラウザやPCに引っ越せます。</li>
+        </ul>
+
+        <h2>2. 取引を取得する</h2>
+        <ul>
+          <li>開始日・終了日は<strong>CSVに出す期間の絞り込み</strong>です。計算は常に全履歴が対象です（LP・貸付の元本を過去の預入から計算するため。初回の取得は数分かかります）。</li>
+          <li>取得するのは公開されている取引履歴だけです。秘密鍵や署名は使いません。</li>
+          <li>2回目からは、<strong>履歴ファイル</strong>を使うと数秒〜数十秒で終わります（下の手順）。</li>
+        </ul>
+
+        <h3>履歴ファイルの使い方（2回目から速くする）</h3>
+        <p>取得した履歴をファイルに保存しておくと、次回は新しい取引だけを取りに行きます。計算はこれまでどおり全履歴で行うので、結果は変わりません。</p>
+        <ol>
+          <li><strong>初回は、そのまま取得</strong>：何も読み込まずに「取引を取得する」を押します（全履歴の取得なので数分かかります）。</li>
+          <li><strong>保存する</strong>：終わると集計の上に帯が出ます。「💾 最新の履歴ファイルを保存」を押して、<code>flare_history_年月日.json.gz</code> を PC に保存します。</li>
+          <li><strong>次回は、読み込んでから取得</strong>：「📂 履歴ファイルを読み込む」で保存したファイルを選び、「取引を取得する」を押します。</li>
+          <li><strong>また保存する</strong>：取得が終わったら、もう一度「💾 最新の履歴ファイルを保存」を押します。次回はこの新しいファイルを使います。</li>
+        </ol>
+        <ul>
+          <li><strong>読み込むと、予定が出ます</strong>：ファイル名の下に、ウォレットごとに「どこまで保存済みか」と「続きだけ取得するか、全履歴を取得するか」が出ます。履歴ファイルは、あればいつも読み込んでください（使えないファイルのときは、自動で全履歴を取得します）。</li>
+          <li><strong>ファイルは常に1つ</strong>です。登録した全ウォレットの分が1つに入ります。新しいファイルを保存したら、古いファイルは捨てて大丈夫です。</li>
+          <li><strong>ウォレットを追加したとき</strong>も、同じファイルを読み込んで取得します。追加したウォレットだけ全履歴を取り、同じファイルに入ります。</li>
+          <li><strong>全履歴を取り直す</strong>：ファイルを読み込むと出るチェックです。入れて取得すると、ファイルを使わずに最初から取り直します。申告の前などの節目や、ℹ️ の表示が出たときに使います。取り直したあとは、履歴ファイルとの違いも調べて、帯でお知らせします。</li>
+          <li><strong>スマホで使う場合</strong>：履歴ファイルは使わず、何も読み込まずに取得してください（毎回、全履歴の取得になります）。ファイルの保存・読み込みと、クリプタクトへの CSV の取り込みは PC での利用を想定しています。</li>
+        </ul>
+
+        <h2>3. 一覧を確認する</h2>
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>状態</th><th>意味</th><th>すること</th></tr></thead>
+            <tbody>
+              <tr><td><span class="status-badge status-export">出力</span></td><td>出力対象。損益に関わる行です。</td><td>基本はそのままで大丈夫です。</td></tr>
+              <tr><td><span class="status-badge status-review">要確認</span></td><td>要確認。外部アドレスとの送受金など、ツールだけでは判断できない行です。円価格を取得できなかった出力対象の行（「⚠ 円価格を取得できませんでした」）もここに入ります。</td><td>自分の別ウォレットや取引所との移動なら、アドレス帳で相手を「自分」に登録すると送金扱いになります。売買・受け取りなら種類を選んでチェックを入れます。円価格が無い行は、単価を調べて CSV に入れるか、クリプタクトの修正画面で入力します。</td></tr>
+              <tr><td><span class="status-badge status-skip">スキップ</span></td><td>出力しない行。預け入れ・Wrap・承認など、資産の置き場所が変わるだけの操作です。</td><td>対応不要です。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul>
+          <li><strong>💴 の表示</strong>は、CSVで使う円価格です。「クリプタクトの時価で計算」はクリプタクトが持っている価格を使う行、「¥…/枚（自動）」はこのツールが付けた円価格です。</li>
+          <li><strong>⚠ 円価格を取得できませんでした</strong> の行は、既定でCSVに出しません。価格を確認して手入力するか、出力しないかを決めてください。</li>
+          <li><strong>🪙 トークン設定</strong>で、クリプタクトに無いトークン（カスタムコイン <code>USER-…</code>）か、対応コインかを選びます。</li>
+          <li><strong>📒 オープンポジション台帳</strong>で、LP・レンディングの残っている元本と、確定した損益を確認できます。</li>
+        </ul>
+
+        <h2>4. CSVをクリプタクトに取り込む</h2>
+        <ul>
+          <li>「CSVダウンロード」で出したファイルを、クリプタクトにカスタムファイルとして取り込みます。</li>
+          <li><strong>1か月ずつ取り込む</strong>と、未分類取引（残高不足など）が出たときに原因を探しやすくなります。</li>
+        </ul>
+
+        <h3>前年までを別の方法で申告済みの場合</h3>
+        <ul>
+          <li>今年の <code>1/1 00:00:00</code> に、前年末の残高を BUY（決済通貨 JPY、取得単価は前年の平均単価）で手入力します。前年の損益は変わりません。</li>
+          <li>前年末に借りていたコインは、BUY ではなく BORROW（価格は空欄）で入れます。借りた分に取得価格が付かないようにするためです。</li>
+          <li>LP やレンディングに預けていた分も、クリプタクト上は手元にあるものとして残高に含めます（差分計上のため）。</li>
+        </ul>
+
+        <h3>未分類取引が出たとき</h3>
+        <ul>
+          <li><strong>保有枚数以上の売却</strong>：前年末の残高の入力漏れ、要確認の行の出し忘れ、LP報酬などの細かい端数がよくある原因です。端数ならクリプタクトの解消ウィザードで取得単価を入れて追加できます。</li>
+          <li><strong>借入枚数以上の返却</strong>：完済したあとに残っていた利息だけを返した行は、LOSS（利息）にします。このツールは自動で LOSS にして出力します。</li>
+        </ul>
+
+        <h3>取得漏れのチェック（ℹ️ の表示）</h3>
+        <ul>
+          <li>取得のたびに、<strong>履歴から計算した FLR の残高</strong>と<strong>実際の残高</strong>を比べます。1 FLR 以上ずれていると、画面の上に ℹ️ で知らせます。</li>
+          <li><strong>計算のほうが少ない</strong>：エクスプローラー側のデータに欠けがあり、FLR の受け取りが一部出ていない可能性があります。エクスプローラーで最近の入金を確かめてください。</li>
+          <li><strong>計算のほうが多い</strong>：P チェーンへの移動（ステーキング）のように、エクスプローラーに出ない出金があるとこうなります。自分の資産の置き場所が変わっただけなら、損益には影響しません。</li>
+        </ul>
+      </div>
+      <aside class="doc-toc" aria-label="目次"></aside>
+    </div>
+  </div>
+
+  <!-- ===== 区分けの考え方 ===== -->
+  <div class="page" id="page-concepts" hidden>
+    <header class="hero">
+      <div class="hero-in">
+        <h1 class="catch">区分けの考え方</h1>
+        <p class="lead">損益が生まれる行だけを出す。資産の置き場所が変わるだけの操作は出さない。</p>
+      </div>
+    </header>
+    <div class="container doc-layout">
+      <div class="card panel doc">
+        <h2 id="services">対応サービスと取引の種類</h2>
+        <p>どのサービスの、どの取引に対応しているかの一覧です。<code>BONUS</code> などは CSV に書く種類です。細かい区分けは、下の「コメントの区分け一覧」の表で確認できます。</p>
+        <div class="svc-legend">
+          <span><span class="status-badge status-export">出力</span>CSV に出す</span>
+          <span><span class="status-badge status-skip">出力しない</span>スキップ・差分計上</span>
+          <span><span class="status-badge status-review">要確認</span>自分で種類を選ぶ</span>
+        </div>
+
+        <h3 class="svc-cat">Flare 本体</h3>
+        <div class="svc-grid">
+          <div class="svc-card">
+            <div class="svc-name">送受金<small>FLR・トークン</small></div>
+            <ul class="svc-rows">
+              <li><span>外部からの受け取り</span><span class="svc-pills"><span class="status-badge status-review">要確認</span></span></li>
+              <li><span>外部への送付</span><span class="svc-pills"><span class="status-badge status-review">要確認</span></span></li>
+              <li><span>登録ウォレット間の移動</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+              <li><span>同じアドレスへの送付</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-basic">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">Wrap・Unwrap<small>FLR ⇔ WFLR</small></div>
+            <ul class="svc-rows">
+              <li><span>Wrap / Unwrap</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-basic">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">FTSO デリゲート・投票</div>
+            <ul class="svc-rows">
+              <li><span>FTSO へのデリゲート設定</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+              <li><span>ガバナンス投票</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-basic">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">報酬<small>デリゲート・FlareDrop・rFLR</small></div>
+            <ul class="svc-rows">
+              <li><span>デリゲート報酬（自動クレーム含む）</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+              <li><span>FlareDrop</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+              <li><span>P-chain ステーキング報酬</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+              <li><span>rFLR の受け取り</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+              <li><span>rFLR を WFLR に変換</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+              <li><span>自動クレームの登録料</span><span class="svc-pills"><span class="status-badge status-export mono">DEFIFEE</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-reward">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">FAssets<small>FXRP</small></div>
+            <ul class="svc-rows">
+              <li><span>ミント・償還</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+              <li><span>ミント予約・償還の手数料</span><span class="svc-pills"><span class="status-badge status-export mono">DEFIFEE</span></span></li>
+              <li><span>担保プールの預け入れ・引き出し</span><span class="svc-pills"><span class="status-badge status-skip">差分計上</span></span></li>
+              <li><span>プールのトークン（FCPT）</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+              <li><span>プールの手数料分配</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-fassets">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">Flare Smart Accounts</div>
+            <ul class="svc-rows">
+              <li><span>ミント・償還</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+              <li><span>ミント・償還の手数料</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+              <li><span>Vault で増えた分（引き出し時）</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+              <li><span>登録ウォレット間の移動</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="fassets">区分けを見る ↓</button>
+          </div>
+        </div>
+
+        <h3 class="svc-cat">DEX</h3>
+        <div class="svc-grid">
+          <div class="svc-card">
+            <div class="svc-name">SparkDEX</div>
+            <ul class="svc-rows">
+              <li><span>Swap</span><span class="svc-pills"><span class="status-badge status-export mono">SELL</span></span></li>
+              <li><span>LP の預け入れ・引き出し</span><span class="svc-pills"><span class="status-badge status-skip">差分計上</span></span></li>
+              <li><span>LP の差益</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+              <li><span>LP の差損</span><span class="svc-pills"><span class="status-badge status-export mono">LOSS</span></span></li>
+              <li><span>ICHI Vault の預け入れ・引き出し</span><span class="svc-pills"><span class="status-badge status-skip">差分計上</span></span></li>
+              <li><span>デリゲート報酬・V3 LP の報酬</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-lp">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">BlazeSwap</div>
+            <ul class="svc-rows">
+              <li><span>Swap</span><span class="svc-pills"><span class="status-badge status-export mono">SELL</span></span></li>
+              <li><span>LP の預け入れ・引き出し</span><span class="svc-pills"><span class="status-badge status-skip">差分計上</span></span></li>
+              <li><span>LP の差益</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+              <li><span>LP の差損</span><span class="svc-pills"><span class="status-badge status-export mono">LOSS</span></span></li>
+              <li><span>デリゲート報酬</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-lp">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">Enosys DEX</div>
+            <ul class="svc-rows">
+              <li><span>Swap</span><span class="svc-pills"><span class="status-badge status-export mono">SELL</span></span></li>
+              <li><span>LP の預け入れ・引き出し</span><span class="svc-pills"><span class="status-badge status-skip">差分計上</span></span></li>
+              <li><span>LP の差益</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+              <li><span>LP の差損</span><span class="svc-pills"><span class="status-badge status-export mono">LOSS</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-lp">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">そのほかの DEX<small>OpenOcean・UniversalRouter など</small></div>
+            <ul class="svc-rows">
+              <li><span>Swap（DEX が分からない場合も）</span><span class="svc-pills"><span class="status-badge status-export mono">SELL</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-swap">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">ファーム<small>LP トークンなどを預けて報酬を得る</small></div>
+            <ul class="svc-rows">
+              <li><span>LP トークンの預け入れ・戻り</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+              <li><span>LP 以外のトークンの預け入れ</span><span class="svc-pills"><span class="status-badge status-review">要確認</span></span></li>
+              <li><span>ファームからの引き出し</span><span class="svc-pills"><span class="status-badge status-review">要確認</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-lp">区分けを見る ↓</button>
+          </div>
+        </div>
+
+        <h3 class="svc-cat">レンディング・Vault</h3>
+        <div class="svc-grid">
+          <div class="svc-card">
+            <div class="svc-name">Kinetic</div>
+            <ul class="svc-rows">
+              <li><span>貸し出し・引き出し</span><span class="svc-pills"><span class="status-badge status-skip">差分計上</span></span></li>
+              <li><span>引き出しの超過分（差益）</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+              <li><span>借入</span><span class="svc-pills"><span class="status-badge status-export mono">BORROW</span></span></li>
+              <li><span>返済</span><span class="svc-pills"><span class="status-badge status-export mono">RETURN</span></span></li>
+              <li><span>利息（借入額を超えて返した分）</span><span class="svc-pills"><span class="status-badge status-export mono">LOSS</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-lend">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">Mystic<small>Morpho</small></div>
+            <ul class="svc-rows">
+              <li><span>貸し出し・引き出し</span><span class="svc-pills"><span class="status-badge status-skip">差分計上</span></span></li>
+              <li><span>引き出しの超過分（差益）</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+              <li><span>借入</span><span class="svc-pills"><span class="status-badge status-export mono">BORROW</span></span></li>
+              <li><span>返済</span><span class="svc-pills"><span class="status-badge status-export mono">RETURN</span></span></li>
+              <li><span>利息（借入額を超えて返した分）</span><span class="svc-pills"><span class="status-badge status-export mono">LOSS</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-lend">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">Upshift・MXRPY・More Markets</div>
+            <ul class="svc-rows">
+              <li><span>Vault の預け入れ・引き出し</span><span class="svc-pills"><span class="status-badge status-skip">差分計上</span></span></li>
+              <li><span>増えた分（引き出し時）</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+              <li><span>戻らなかった元本</span><span class="svc-pills"><span class="status-badge status-export mono">LOSS</span></span></li>
+              <li><span>シェアトークンの受け取り・返却</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-lend">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">Enosys Loans<small>CDP</small></div>
+            <ul class="svc-rows">
+              <li><span>CDP の借入</span><span class="svc-pills"><span class="status-badge status-export mono">BORROW</span></span></li>
+              <li><span>CDP の返済</span><span class="svc-pills"><span class="status-badge status-export mono">RETURN</span></span></li>
+              <li><span>担保・ガス補償の出し入れ</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+              <li><span>Stability Pool の預け入れ・引き出し</span><span class="svc-pills"><span class="status-badge status-skip">差分計上</span></span></li>
+              <li><span>Stability Pool の利回り</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+              <li><span>清算で受け取った担保</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+              <li><span>清算で使われた CDP</span><span class="svc-pills"><span class="status-badge status-export mono">LOSS</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-cdp">区分けを見る ↓</button>
+          </div>
+        </div>
+
+        <h3 class="svc-cat">リキッドステーキング</h3>
+        <p class="svc-note">別のコインへの交換として扱います。CSV では、ステークは受け取った LST の BUY、アンステークは渡した LST の SELL と書きます。DEX で LST を売買した場合も同じ書き方です。</p>
+        <div class="svc-grid">
+          <div class="svc-card">
+            <div class="svc-name">Sceptre<small>sFLR</small></div>
+            <ul class="svc-rows">
+              <li><span>Stake（FLR → sFLR）</span><span class="svc-pills"><span class="status-badge status-export mono">BUY</span></span></li>
+              <li><span>すぐ受け取る Unstake（sFLR → FLR）</span><span class="svc-pills"><span class="status-badge status-export mono">SELL</span></span></li>
+              <li><span>アンステークの申請・取り消し</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+              <li><span>申請後の受け取り（sFLR → FLR）</span><span class="svc-pills"><span class="status-badge status-export mono">SELL</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-swap">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">SparkDEX<small>stFLR</small></div>
+            <ul class="svc-rows">
+              <li><span>Mint（FLR → stFLR）</span><span class="svc-pills"><span class="status-badge status-export mono">BUY</span></span></li>
+              <li><span>Burn（stFLR → FLR）</span><span class="svc-pills"><span class="status-badge status-export mono">SELL</span></span></li>
+              <li><span>アンステークの申請（stFLR → FLR）</span><span class="svc-pills"><span class="status-badge status-export mono">SELL</span></span></li>
+              <li><span>申請の手数料</span><span class="svc-pills"><span class="status-badge status-export mono">LOSS</span></span></li>
+              <li><span>申請した FLR の受け取り</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-swap">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">Firelight<small>stXRP</small></div>
+            <ul class="svc-rows">
+              <li><span>Stake（FXRP → stXRP）</span><span class="svc-pills"><span class="status-badge status-export mono">BUY</span></span></li>
+              <li><span>Unstake（stXRP → FXRP）</span><span class="svc-pills"><span class="status-badge status-export mono">SELL</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-swap">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">Dinero<small>flrETH</small></div>
+            <ul class="svc-rows">
+              <li><span>Stake（WETH → flrETH）</span><span class="svc-pills"><span class="status-badge status-export mono">BUY</span></span></li>
+              <li><span>Unstake（flrETH → WETH）</span><span class="svc-pills"><span class="status-badge status-export mono">SELL</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-swap">区分けを見る ↓</button>
+          </div>
+        </div>
+
+        <h3 class="svc-cat">ブリッジ</h3>
+        <div class="svc-grid">
+          <div class="svc-card">
+            <div class="svc-name">Stargate・OFT</div>
+            <ul class="svc-rows">
+              <li><span>ブリッジ手数料</span><span class="svc-pills"><span class="status-badge status-export mono">SENDFEE</span></span></li>
+              <li><span>別チェーンへの送付</span><span class="svc-pills"><span class="status-badge status-review">要確認</span></span></li>
+              <li><span>別チェーンからの着金</span><span class="svc-pills"><span class="status-badge status-review">要確認</span></span></li>
+              <li><span>同じトークンで戻った往復</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+              <li><span>往復で減った分</span><span class="svc-pills"><span class="status-badge status-export mono">SENDFEE</span></span></li>
+              <li><span>別のトークンで戻った往復</span><span class="svc-pills"><span class="status-badge status-export mono">SELL</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-bridge">区分けを見る ↓</button>
+          </div>
+        </div>
+
+        <h3 class="svc-cat">そのほか</h3>
+        <div class="svc-grid">
+          <div class="svc-card">
+            <div class="svc-name">SPRK<small>xSPRK</small></div>
+            <ul class="svc-rows">
+              <li><span>xSPRK との変換・ステーキング</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+              <li><span>ステーキング報酬</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+              <li><span>早期に戻したときのペナルティ</span><span class="svc-pills"><span class="status-badge status-export mono">LOSS</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-other">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">Kii<small>JOULE</small></div>
+            <ul class="svc-rows">
+              <li><span>Stake・Redeem の申請・取り消し</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+              <li><span>ステーキング報酬</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-other">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">DaoFlare</div>
+            <ul class="svc-rows">
+              <li><span>DFLR の焼却</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+              <li><span>HLN 報酬</span><span class="svc-pills"><span class="status-badge status-export mono">BONUS</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-other">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">Spectra<small>PT</small></div>
+            <ul class="svc-rows">
+              <li><span>固定利回りの預け入れ・引き出し</span><span class="svc-pills"><span class="status-badge status-skip">差分計上</span></span></li>
+              <li><span>原資産 → IBT の変換</span><span class="svc-pills"><span class="status-badge status-export mono">SELL</span></span></li>
+              <li><span>PT の受け取り・返却</span><span class="svc-pills"><span class="status-badge status-skip">スキップ</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-lend">区分けを見る ↓</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-name">NFT の売却代金</div>
+            <ul class="svc-rows">
+              <li><span>offer を受けた代金の受け取り</span><span class="svc-pills"><span class="status-badge status-review">要確認</span></span></li>
+            </ul>
+            <button type="button" class="svc-go" data-go="lb-reward">区分けを見る ↓</button>
+          </div>
+        </div>
+
+        <h2>基本の扱い</h2>
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>取引</th><th>CSVでの扱い</th><th>考え方</th></tr></thead>
+            <tbody>
+              <tr><td>Swap</td><td>SELL（渡したコイン → 受け取ったコイン）</td><td>コイン同士の交換は、売却として損益が出ます。クリプタクトに価格の無いコイン（カスタムコインや sFLR など）を受け取る交換は、受け取ったコインの BUY（支払いは渡したコイン）と書きます。意味は同じ交換です。</td></tr>
+              <tr><td>Wrap / Unwrap（FLR ⇔ WFLR）</td><td>出力しない</td><td>同じコインとして扱います。</td></tr>
+              <tr><td>リキッドステーキング（sFLR・stFLR・stXRP・flrETH）</td><td>BUY / SELL（Swap）</td><td>別のコインへの交換として扱います。ステークは受け取った LST の BUY、アンステークは渡した LST の SELL です。申請してから後日受け取るアンステークは、受取量が決まる時点で Swap にします（stFLR は申請時、sFLR は Unlock 後の受け取り時）。即時アンステークの手数料は受取量に含まれるので、別の行にはしません。</td></tr>
+              <tr><td>報酬（FTSO デリゲート、FlareDrop、各 dApp の報酬請求）</td><td>BONUS</td><td>受け取った時点の時価で所得になります。rFLR は WFLR に変換した時点で BONUS。自動クレーム（エグゼキューターが代わりに請求）も、届いた WFLR を BONUS にします。</td></tr>
+              <tr><td>自動クレームの設定（エグゼキューターの登録料）</td><td>DEFIFEE</td><td>登録のときに払う FLR は戻らないので経費です。</td></tr>
+              <tr><td>LP・レンディング・Vault への預け入れ</td><td>差分計上（下で説明）</td><td>預けただけでは損益は出ません。</td></tr>
+              <tr><td>借入</td><td>BORROW / RETURN</td><td>借入額を超えて返した分は利息として LOSS。</td></tr>
+              <tr><td>外部アドレスとの送受金</td><td>要確認</td><td>自分の別ウォレットなら送金（出力しない）、それ以外なら売買や受け取りとして種類を選びます。</td></tr>
+              <tr><td>ブリッジ</td><td>手数料は SENDFEE、本体は要確認</td><td>送り先が自分なら、本体は出力不要です。送った分がそのまま自分のアドレスに戻ってきた往復（例：USDT を Arbitrum 経由で USDT0 にして戻す）は自動で見つけて、同じトークンなら出力せず減った分だけ手数料、別のトークンなら Swap として出します。</td></tr>
+              <tr><td>ガス代</td><td>行の手数料（FLR）</td><td>出力する行の手数料として付けます。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h2>差分計上（LP・レンディング・Vault）</h2>
+        <p>預けている間の値動きは追わず、<strong>実際に手元に戻ったときに損益を確定</strong>させます。</p>
+        <ol>
+          <li><strong>預けたとき</strong>：LEND（CSVに出さない）。クリプタクト上はコインを持ったままです。</li>
+          <li><strong>引き出したとき</strong>：元本までは RECOVER（出さない）。<strong>元本を超えて戻った分だけ BONUS（差益）</strong>。</li>
+          <li><strong>完全に引き上げたとき</strong>：戻らなかった元本を <strong>LOSS（差損）</strong>。</li>
+        </ol>
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>種類</th><th>「完全に引き上げた」の判定</th></tr></thead>
+            <tbody>
+              <tr><td>V2 の LP（BlazeSwap・Enosys V2 など）</td><td>受け取った LP トークンが0に戻ったとき</td></tr>
+              <tr><td>V3 の LP（SparkDEX・Enosys V3 など）</td><td>ポジション（NFT）ごとに元本を管理し、そのポジションの流動性が0になったとき</td></tr>
+              <tr><td>レンディング・Vault</td><td>預けた証明のトークン（kToken・シェアなど）が0に戻ったとき</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul>
+          <li>一部だけ引き出した場合は、先に元本に充てます（元本回収法）。途中の状態は「オープンポジション台帳」で確認できます。</li>
+          <li>LP は2種類のコインを預けるので、トークンごとに差益・差損を計算します。比率が変わるため、片方だけ差益が出たり、片方が差益でもう片方が差損になったりします。</li>
+        </ul>
+
+        <h2 id="fassets">FAssets（FXRP）と Flare Smart Accounts</h2>
+        <ul>
+          <li><strong>FXRP は XRP と同じコイン</strong>として扱います（CSVでは XRP、価格はクリプタクトの時価）。</li>
+          <li>XRP → FXRP のミントと、FXRP → XRP の償還は、同じコインの移動なので出力しません。</li>
+          <li>同じ考え方で、<strong>Flare の WETH（Stargate でブリッジした ETH）は ETH</strong> として出力します。flrETH は ETH とは別のコイン（カスタム USER-FLRETH）で、WETH ⇔ flrETH は交換です。</li>
+          <li>ミント予約手数料・償還のエグゼキューター手数料（FLR）は DEFIFEE（経費）。</li>
+          <li>FAssets の担保プールは差分計上で、手数料の分配（FXRP）は BONUS（XRP）。</li>
+        </ul>
+        <h3>XRPL Tax for Cryptact との役割分担</h3>
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>内容</th><th>Flare Tax（このツール）</th><th>XRPL Tax for Cryptact</th></tr></thead>
+            <tbody>
+              <tr><td>Upshift などで増えた分</td><td>引き出した時点で BONUS（XRP）</td><td>記録しない</td></tr>
+              <tr><td>ミント・償還</td><td>出力しない</td><td>記録しない</td></tr>
+              <tr><td>Smart Account のミント・償還手数料</td><td>出力しない</td><td>DEFIFEE（XRP）</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Smart Account の利益も Flare 側で計上します。Vault から引き出したあとも FXRP は Smart Account に残り、XRPL への償還は別の操作・ロット単位で端数が Flare に残るため、XRPL 側の「戻ってきた XRP − 送った XRP」では正しく計算できないからです。両方のツールで同じものを二重に出さないように分けています。</p>
+
+        <h2>円価格の付け方</h2>
+        <ol>
+          <li>クリプタクトに価格があるコインは、価格欄を空欄にしてクリプタクトの時価を使います。</li>
+          <li>価格の無いトークンは、このツールが円価格を付けます：決済通貨にできるコインとの交換レート → 同じ取引で経由した量 → 直前のプール価格 → 払い戻し比率、の順で探し、円へは bitbank の価格で換算します。</li>
+          <li>クリプタクトに無いトークンは、カスタムコイン <code>USER-…</code> として出力します。</li>
+        </ol>
+
+        <p class="note-box">Cyclo（cysFLR）や Spectra（PT）などは Swap として出していますが、税務上の扱いが定まっていない取引です。ご自身で判断してください。</p>
+
+        <h2 id="labels">コメントの区分け一覧</h2>
+        <p>一覧のコメント欄に出る <code>[大項目] 中項目</code> の意味です。<code>{トークン}</code> <code>{DEX}</code> などには実際の名前が入ります。「CSV」は出力される種類と、既定の扱い（出力・スキップ・要確認）です。</p>
+        <p>コメントの末尾に付く語：<strong>差益</strong>＝元本を超えて戻った分（BONUS）、<strong>差損</strong>＝戻らなかった元本（LOSS）、<strong>利息</strong>＝借入額を超えて返した分（LOSS）、<strong>（自分のアドレス間）</strong>＝登録ウォレット同士の移動（スキップ）。</p>
+        <div class="lb-filter">
+          <input type="text" id="lbFilter" placeholder="区分けを絞り込む（例: Kinetic、BONUS、要確認）" aria-label="区分けを絞り込む" autocomplete="off" spellcheck="false">
+          <button type="button" class="x" id="lbFilterClear" aria-label="絞り込みを解除" hidden>×</button>
+        </div>
+        <p class="lb-none" id="lbNone" hidden>該当する区分けはありません</p>
+
+        <h3 id="lb-basic">【Transfer】【Wrap】【GasFee】ほか 基本の操作</h3>
+        <div class="table-wrapper"><table>
+          <thead><tr><th>区分け</th><th>CSV</th><th>意味</th></tr></thead>
+          <tbody>
+            <tr><td>【Transfer】Receive {トークン}</td><td>BUY・要確認</td><td>外部からの受け取り。自分の別ウォレット・取引所からなら送金（出力しない）</td></tr>
+            <tr><td>【Transfer】Send {トークン}</td><td>SELL・要確認</td><td>外部への送付。自分宛てなら送金（出力しない）</td></tr>
+            <tr><td>【Transfer】Self Transfer {トークン}</td><td>スキップ</td><td>同じアドレスへの送付</td></tr>
+            <tr><td>【Wrap】Wrap FLR / Unwrap WFLR</td><td>スキップ</td><td>FLR ⇔ WFLR。同じコインとして扱う</td></tr>
+            <tr><td>【GasFee】Approve Token / Smart Contract / TWAP Order Setup</td><td>スキップ</td><td>資産が動かない操作（承認など）。ガス代のみ</td></tr>
+            <tr><td>【Failed】Transaction Failed (gas only)</td><td>スキップ</td><td>失敗した取引。ガス代のみ</td></tr>
+            <tr><td>【Delegate】Delegate to FTSO</td><td>スキップ</td><td>FTSO へのデリゲート設定</td></tr>
+            <tr><td>【FIP】Cast Vote</td><td>スキップ</td><td>ガバナンス投票</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3 id="lb-reward">【Delegate】【FLR Staking】【rFLR】ほか 報酬</h3>
+        <div class="table-wrapper"><table>
+          <thead><tr><th>区分け</th><th>CSV</th><th>意味</th></tr></thead>
+          <tbody>
+            <tr><td>【Delegate】Claim Rewards</td><td>BONUS・出力</td><td>FTSO デリゲート報酬（自動クレームを含む）</td></tr>
+            <tr><td>【FLR Staking】Claim Rewards</td><td>BONUS・出力</td><td>P-chain ステーキング報酬</td></tr>
+            <tr><td>【FlareDrop】Claim</td><td>BONUS・出力</td><td>FlareDrop</td></tr>
+            <tr><td>【rFLR】Claim</td><td>スキップ</td><td>rFLR の受け取り（まだ所得にしない）</td></tr>
+            <tr><td>【rFLR】Convert to WFLR</td><td>BONUS・出力</td><td>rFLR を WFLR に変換した時点で所得</td></tr>
+            <tr><td>【Delegate】rFLR Withdraw</td><td>スキップ</td><td>変換で使った rFLR の焼却</td></tr>
+            <tr><td>【{DEX}】Claim Delegate Rewards</td><td>BONUS・出力</td><td>LP などで受け取るデリゲート報酬（BlazeSwap・SparkDEX）</td></tr>
+            <tr><td>【{DEX}】Claim LP Rewards</td><td>BONUS・出力</td><td>V3 LP の報酬</td></tr>
+            <tr><td>【{コントラクト名}】{claim系} {トークン}</td><td>BONUS・出力</td><td>各サービスの報酬請求（コントラクト名で表示）</td></tr>
+            <tr><td>【Rewards】Claim FLR</td><td>BONUS・出力</td><td>自分が実行したクレームで届いた FLR</td></tr>
+            <tr><td>【Transfer】Receive FLR（他者の取引の中で届いた分）</td><td>BUY・要確認</td><td>他の人が実行した取引で届いた FLR。報酬・売却代金・送金のどれかをツールでは決められないので要確認（報酬コントラクトからの自動クレームは【Delegate】などで BONUS）</td></tr>
+            <tr><td>【Farm】withdraw {トークン}</td><td>BUY・要確認</td><td>ファームなどから引き出しただけの受け取り。預けていた分の戻りなら出力不要、報酬なら BONUS に変更</td></tr>
+            <tr><td>【NFT】acceptOffer {トークン}</td><td>BUY・要確認</td><td>NFT などを売った代金の受け取り</td></tr>
+            <tr><td>【Pass-through】{トークン}</td><td>スキップ</td><td>同じ取引の中で受け取り、そのまま出ていった分（報酬の引換券トークンなど）。手元に残らないので判定から外す</td></tr>
+            <tr><td>【{コントラクト名}】{関数} でFLR受取</td><td>BONUS・出力</td><td>ゲーム・NFT の当選金など</td></tr>
+            <tr><td>【{コントラクト名}】{関数} 支払い</td><td>SELL・要確認</td><td>FLR での支払い（返金分は差し引き済み）</td></tr>
+            <tr><td>【Auto-Claim】Executor Registration Fee</td><td>DEFIFEE・出力</td><td>自動クレームのエグゼキューター登録料</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3 id="lb-swap">【DEX】【sFLR Staking】ほか Swap・リキッドステーキング</h3>
+        <div class="table-wrapper"><table>
+          <thead><tr><th>区分け</th><th>CSV</th><th>意味</th></tr></thead>
+          <tbody>
+            <tr><td>【{DEX}】Swap {A} to {B}</td><td>SELL・出力</td><td>交換。クリプタクトに価格の無いコイン（カスタムコインなど）を受け取る場合は、受け取ったコインの BUY と書く。DEX が分からない場合は【DEX】</td></tr>
+            <tr><td>【sFLR Staking】Stake sFLR</td><td>BUY・出力</td><td>FLR → sFLR の交換（sFLR の BUY）</td></tr>
+            <tr><td>【sFLR Staking】Unstake sFLR</td><td>SELL・出力</td><td>sFLR → FLR の交換（すぐ受け取るアンステーク。手数料は受取量に含まれる）</td></tr>
+            <tr><td>【sFLR Staking】Request Unlock sFLR / Cancel Unlock sFLR</td><td>スキップ</td><td>アンステークの申請・取り消し（受け取り時に Swap）</td></tr>
+            <tr><td>【sFLR Staking】Unstake sFLR（Unlock 後の受け取り）</td><td>SELL・出力</td><td>申請後に受け取った WFLR との Swap</td></tr>
+            <tr><td>【stFLR Staking】Mint stFLR</td><td>BUY・出力</td><td>FLR → stFLR の交換（stFLR の BUY）</td></tr>
+            <tr><td>【stFLR Staking】Burn stFLR</td><td>SELL・出力</td><td>stFLR → FLR の交換</td></tr>
+            <tr><td>【stFLR Staking】Unstake stFLR（申請時に受取量が確定…）</td><td>SELL・出力</td><td>遅延アンステークの申請時に Swap</td></tr>
+            <tr><td>【stFLR Staking】Claim Unstaked WFLR</td><td>スキップ</td><td>申請時に計上済みの受け取り</td></tr>
+            <tr><td>【stXRP Staking】Stake stXRP</td><td>BUY・出力</td><td>FXRP → stXRP の交換（stXRP の BUY。CSV では XRP で支払い）</td></tr>
+            <tr><td>【stXRP Staking】Unstake stXRP</td><td>SELL・出力</td><td>stXRP → FXRP の交換</td></tr>
+            <tr><td>【flrETH Staking】Stake flrETH</td><td>BUY・出力</td><td>WETH → flrETH の交換（flrETH の BUY。CSV では ETH で支払い）</td></tr>
+            <tr><td>【flrETH Staking】Unstake flrETH</td><td>SELL・出力</td><td>flrETH → WETH の交換</td></tr>
+            <tr><td>【SparkDEX】【BlazeSwap】Swap FLR to sFLR など</td><td>BUY / SELL・出力</td><td>DEX で LST を売買した場合。ステーキングではなく通常の Swap と表示（扱いは同じ交換。LST を買う向きは BUY、売る向きは SELL）</td></tr>
+            <tr><td>【stFLR Staking】Unstake Fee</td><td>LOSS・出力</td><td>stFLR のアンステーク申請の手数料。即時アンステークの手数料は Swap の交換比率に含まれるので、別の行にはしない</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3 id="lb-lp">【{DEX}】【ICHI Vault】【Farm】 LP</h3>
+        <div class="table-wrapper"><table>
+          <thead><tr><th>区分け</th><th>CSV</th><th>意味</th></tr></thead>
+          <tbody>
+            <tr><td>【{DEX}】Provide LP / Add LP {トークン}</td><td>LEND・スキップ</td><td>LP への預け入れ（V2 / V3）</td></tr>
+            <tr><td>【{DEX}】Withdraw LP / Remove LP {トークン}</td><td>RECOVER・スキップ</td><td>LP からの引き出し（元本まで）</td></tr>
+            <tr><td>【{DEX}】Withdraw LP … 差益</td><td>BONUS・出力</td><td>元本を超えて戻った分</td></tr>
+            <tr><td>【{DEX}】LP差損 {トークン}</td><td>LOSS・出力</td><td>完全に引き上げたときに戻らなかった元本</td></tr>
+            <tr><td>【{DEX}】Receive LP Token / Return LP Token</td><td>スキップ</td><td>LP トークンの受け取り・返却</td></tr>
+            <tr><td>【ICHI Vault】Deposit / Withdraw {トークン}</td><td>LEND / RECOVER・スキップ</td><td>ICHI Vault への預け入れ・引き出し（差分計上。預けたのと違うトークンで戻った分は差益、戻らなかった元本は差損）</td></tr>
+            <tr><td>【Farm】Send / Receive LP Token</td><td>スキップ</td><td>ファームへの LP トークンの預け入れ・戻り</td></tr>
+            <tr><td>【Farm】Stake {トークン}</td><td>SELL・要確認</td><td>LP トークン以外をファームに預けた分。戻りを自動で追えないので、預けただけなら出力不要</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3 id="lb-lend">【Kinetic】【Mystic】【Upshift】ほか レンディング・Vault</h3>
+        <div class="table-wrapper"><table>
+          <thead><tr><th>区分け</th><th>CSV</th><th>意味</th></tr></thead>
+          <tbody>
+            <tr><td>【Kinetic / Mystic】Supply {トークン}</td><td>LEND・スキップ</td><td>貸し出し（預け入れ）</td></tr>
+            <tr><td>【Kinetic / Mystic】Withdraw {トークン}</td><td>RECOVER・スキップ（超過分は差益 BONUS）</td><td>引き出し</td></tr>
+            <tr><td>【Kinetic / Mystic】Borrow {トークン}</td><td>BORROW・出力</td><td>借入</td></tr>
+            <tr><td>【Kinetic / Mystic】Repay {トークン}</td><td>RETURN・出力（超過分は利息 LOSS）</td><td>返済。完済後の利息だけの返済は LOSS</td></tr>
+            <tr><td>【Upshift / MXRPY / More Markets】Deposit / Withdraw {トークン}</td><td>LEND / RECOVER・スキップ</td><td>Vault への預け入れ・引き出し（差分計上）</td></tr>
+            <tr><td>【Upshift / MXRPY / More Markets】Receive / Return Vault Share</td><td>スキップ</td><td>Vault のシェアトークンの受け取り・返却</td></tr>
+            <tr><td>【Spectra】Deposit (Fixed Yield) / Withdraw</td><td>LEND / RECOVER・スキップ</td><td>固定利回りへの預け入れ・引き出し</td></tr>
+            <tr><td>【Spectra】{原資産} → {IBT} 変換</td><td>SELL・出力</td><td>PT 購入時の変換</td></tr>
+            <tr><td>【Spectra】Receive / Redeem/Sell PT</td><td>スキップ</td><td>PT の受け取り・返却</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3 id="lb-cdp">【Enosys Loans】 CDP の借入・Stability Pool</h3>
+        <div class="table-wrapper"><table>
+          <thead><tr><th>区分け</th><th>CSV</th><th>意味</th></tr></thead>
+          <tbody>
+            <tr><td>【Enosys Loans】Borrow CDP</td><td>BORROW・出力</td><td>Trove での CDP の借入</td></tr>
+            <tr><td>【Enosys Loans】Repay CDP</td><td>RETURN・出力</td><td>Trove での CDP の返済</td></tr>
+            <tr><td>【Enosys Loans】Deposit / Withdraw Collateral {トークン}</td><td>スキップ</td><td>担保の出し入れ</td></tr>
+            <tr><td>【Enosys Loans】Gas Compensation Deposit / Refund</td><td>スキップ</td><td>Trove の開閉時に預ける・戻るガス補償</td></tr>
+            <tr><td>【Enosys Loans】Deposit to / Withdraw from Stability Pool</td><td>LEND / RECOVER・スキップ</td><td>Stability Pool への預け入れ・引き出し</td></tr>
+            <tr><td>【Enosys Loans】SP Yield CDP / Withdraw yield</td><td>BONUS・出力</td><td>Stability Pool の利回り</td></tr>
+            <tr><td>【Enosys Loans】SP Liquidation Gain {トークン}</td><td>BONUS・出力</td><td>清算で受け取った担保</td></tr>
+            <tr><td>【Enosys Loans】SP Liquidation Cost CDP</td><td>LOSS・出力</td><td>清算で使われた CDP</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3 id="lb-fassets">【FAssets】【FAssets Pool】 FXRP</h3>
+        <div class="table-wrapper"><table>
+          <thead><tr><th>区分け</th><th>CSV</th><th>意味</th></tr></thead>
+          <tbody>
+            <tr><td>【FAssets】Mint FXRP / Redeem FXRP</td><td>スキップ</td><td>XRP と同じコインなので記録しない</td></tr>
+            <tr><td>【FAssets】Collateral Reservation Fee</td><td>DEFIFEE・出力</td><td>ミント予約手数料</td></tr>
+            <tr><td>【FAssets】Redemption Executor Fee</td><td>DEFIFEE・出力</td><td>償還のエグゼキューター手数料</td></tr>
+            <tr><td>【FAssets】Enter / Exit Collateral Pool</td><td>LEND / RECOVER・スキップ</td><td>担保プールへの預け入れ・引き出し（差分計上）</td></tr>
+            <tr><td>【FAssets】Receive / Return Pool Token</td><td>スキップ</td><td>担保プールのトークン（FCPT）</td></tr>
+            <tr><td>【FAssets Pool】Withdraw Fees {トークン}</td><td>BONUS・出力</td><td>担保プールの手数料分配</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3 id="lb-bridge">【Bridge】【Bridge/Mint】 ブリッジ</h3>
+        <div class="table-wrapper"><table>
+          <thead><tr><th>区分け</th><th>CSV</th><th>意味</th></tr></thead>
+          <tbody>
+            <tr><td>【Bridge】Bridge Fee</td><td>SENDFEE・出力</td><td>ブリッジ手数料（FLR）</td></tr>
+            <tr><td>【Bridge】Send {トークン} to another chain</td><td>SELL・要確認</td><td>別チェーンへの送付。自分宛てなら出力不要</td></tr>
+            <tr><td>【Bridge/Mint】Receive {トークン}</td><td>BUY・要確認</td><td>ブリッジなどでの着金。自分の資金なら出力不要</td></tr>
+            <tr><td>【Bridge】Send … to {チェーン}（…に戻った往復）／ Receive … from {チェーン}</td><td>スキップ</td><td>同じトークンで戻った往復</td></tr>
+            <tr><td>【Bridge】Bridge Fee {トークン}（往復で減った分）</td><td>SENDFEE・出力</td><td>往復で減った分</td></tr>
+            <tr><td>【Bridge】Swap {A} to {B} via {チェーン}</td><td>SELL・出力</td><td>別のトークンで戻った往復（例：USDT → USDT0）</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3 id="lb-other">【SPRK Staking】【Kii】【DaoFlare】 その他のトークン</h3>
+        <div class="table-wrapper"><table>
+          <thead><tr><th>区分け</th><th>CSV</th><th>意味</th></tr></thead>
+          <tbody>
+            <tr><td>【SPRK Staking】Convert to xSPRK / Convert to SPRK、Staking、xSPRK Return</td><td>スキップ</td><td>SPRK ⇔ xSPRK とステーキング</td></tr>
+            <tr><td>【SPRK Staking】Claim WFLR / stFLR / SPRK</td><td>BONUS・出力</td><td>ステーキング報酬</td></tr>
+            <tr><td>【SPRK Staking】Instant Fee</td><td>LOSS・出力</td><td>xSPRK を早期に戻したときのペナルティ</td></tr>
+            <tr><td>【Kii】Stake JOULE → KII、Redeem request、Cancel redeem</td><td>スキップ</td><td>KII は JOULE と同じコインとして扱う</td></tr>
+            <tr><td>【Kii】Staking Rewards</td><td>BONUS・出力</td><td>KII の報酬（JOULE として出力）</td></tr>
+            <tr><td>【DaoFlare】DFLR を焼却</td><td>スキップ</td><td>報酬の受け取りに使う DFLR の焼却</td></tr>
+            <tr><td>【DaoFlare】Claim HLN</td><td>BONUS・出力</td><td>毎月の HLN 報酬</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <aside class="doc-toc" aria-label="目次"></aside>
+    </div>
+  </div>
+
+  <!-- ===== 免責事項 ===== -->
+  <div class="page" id="page-disclaimer" hidden>
+    <header class="hero">
+      <div class="hero-in">
+        <h1 class="catch">免責事項</h1>
+        <p class="lead">ご利用の前にお読みください。</p>
+      </div>
+    </header>
+    <div class="container doc-layout">
+      <div class="card panel doc">
+        <h2>税務アドバイスではありません</h2>
+        <p>このツールは、取引履歴をクリプタクトに取り込める形に整えるための補助ツールです。税務・会計上の助言を行うものではありません。区分けや円価格は一つの考え方に基づく目安です。<strong>申告内容の最終的な判断は、ご自身または税理士にご確認ください。</strong></p>
+
+        <h2>正確さは保証しません</h2>
+        <ul>
+          <li>分類や円価格の計算に誤りや漏れがある可能性があります。出力されたCSVは、必ずご自身で内容を確認してからお使いください。</li>
+          <li>対応していない dApp や、新しいコントラクトの取引は、正しく分類されないことがあります。</li>
+          <li>取引データは公開API（Flare Blockscout、Flare の公開RPC）、円価格は bitbank の公開APIから取得しています。これらの提供元の障害や仕様変更、データの欠落によって結果が変わることがあります。</li>
+        </ul>
+
+        <h2>データの扱い</h2>
+        <ul>
+          <li>ウォレットのアドレスを使って公開されている取引履歴を読むだけです。秘密鍵・シードフレーズは不要で、取引の署名や送金は一切行いません。</li>
+          <li>登録したウォレット・トークン設定・アドレス帳は、お使いのブラウザ内（localStorage）にだけ保存します。</li>
+          <li>計算はすべて、お使いのブラウザの中で行います。ウォレットのアドレスや取引履歴を、このツールのサーバーに送ることはありません（サーバー自体がありません）。</li>
+          <li>通信先は次のとおりです。公開されている取引履歴を取る Flare の Blockscout と Flare の RPC（取得のために、ウォレットのアドレスがここに送られます）、円価格を取る bitbank、計算エンジン（Pyodide）を配る jsDelivr。</li>
+          <li>履歴ファイルは、利用者の端末にだけ保存されます。ファイルにはウォレットのアドレスと取引履歴が入っているので、人に渡すときはご注意ください。</li>
+        </ul>
+
+        <h2>その他</h2>
+        <ul>
+          <li>このツールは個人が作成したもので、クリプタクト・Flare Network・各 dApp の運営元とは関係ありません。</li>
+          <li>このツールの利用によって生じたいかなる損害についても、作成者は責任を負いません。ご自身の責任でご利用ください。</li>
+        </ul>
+      </div>
+      <aside class="doc-toc" aria-label="目次"></aside>
+    </div>
+  </div>
+
+  <footer class="foot" style="padding: 0 16px 40px;">
+    <p>Flare Tax for Cryptact — 取引データ: <a href="https://flare-explorer.flare.network" target="_blank" rel="noopener">Flare Blockscout</a> ·
+      <a href="https://www.cryptact.com" target="_blank" rel="noopener">クリプタクト</a> ·
+      <a href="#disclaimer">免責事項</a></p>
+    <p>税務上の最終判断はご自身または税理士にご確認ください。</p>
+  </footer>
+
+  <script>
+    // ===== Constants =====
+    const EXPLORER_BASE = 'https://flare-explorer.flare.network/tx/';
+    const ACTION_OPTIONS = {
+      "BUY": "BUY (買い)",
+      "SELL": "SELL (売り)",
+      "BONUS": "BONUS (ボーナス)",
+      "LOSS": "LOSS (損失/費用)",
+      "REDUCE": "REDUCE (在庫減少)",
+      "STAKING": "STAKING (ステーキング報酬)",
+      "LENDING": "LENDING (貸しコイン収入)",
+      "LEND": "LEND (貸コイン)",
+      "RECOVER": "RECOVER (貸コイン回収)",
+      "MINING": "MINING (マイニング報酬)",
+      "SENDFEE": "SENDFEE (送金手数料)",
+      "PAY": "PAY (支払い)",
+      "BORROW": "BORROW (借コイン)",
+      "RETURN": "RETURN (借コイン返却)",
+      "LEVELUP": "LEVELUP (レベルアップ)",
+      "CASH": "CASH (現金調整)",
+      "TIP": "TIP (チップ)",
+      "EXPENSE": "EXPENSE (費用)",
+      "DEFIFEE": "DEFIFEE (DeFi手数料)"
+    };
+
+    // ===== 計算エンジン (Web Worker の中で動く Pyodide = ブラウザ上の Python) =====
+    // サーバーは使わない。取得・分類・円価格の計算は web/worker.js の中で行い、ここは依頼と結果の受け取りだけ
+    const ENGINE_FAIL = '計算エンジンを読み込めませんでした。通信環境を確認して、ページを開き直してください。';
+    const FILE_PROTOCOL_MSG = 'このページは Web サーバー経由で開いてください（GitHub Pages、または start.command）。ファイルを直接開くと、計算エンジンが動きません。';
+    const engine = { state: 'loading', error: '', worker: null, seq: 0, pending: new Map(), waiters: [] };
+
+    function engineFailed(message) {
+      engine.state = 'failed';
+      engine.error = message;
+      engine.waiters.splice(0).forEach(w => w.reject(new Error(message)));
+      engine.pending.forEach(p => p.reject(new Error(message)));
+      engine.pending.clear();
+      showError(message);
+    }
+
+    function startEngine() {
+      if (location.protocol === 'file:') {  // file:// では Worker が動かない
+        engine.state = 'file';
+        engine.error = FILE_PROTOCOL_MSG;
+        showError(FILE_PROTOCOL_MSG);
+        return;
+      }
+      try {
+        engine.worker = new Worker('web/worker.js');
+      } catch (e) {
+        engineFailed(ENGINE_FAIL);
+        return;
+      }
+      engine.worker.onmessage = (ev) => {
+        const m = ev.data || {};
+        if (m.type === 'ready') {
+          engine.state = 'ready';
+          engine.waiters.splice(0).forEach(w => w.resolve());
+        } else if (m.id === undefined && m.type === 'error') {  // 起動の失敗
+          console.error(m.message);
+          engineFailed(ENGINE_FAIL);
+        } else if (m.type === 'progress') {
+          const p = engine.pending.get(m.id);
+          if (p && p.onProgress) p.onProgress(m.data);
+        } else if (m.type === 'done' || m.type === 'error') {
+          const p = engine.pending.get(m.id);
+          if (!p) return;
+          engine.pending.delete(m.id);
+          if (m.type === 'done') p.resolve(m); else p.reject(new Error(m.message));
+        }
+      };
+      engine.worker.onerror = (e) => { console.error(e); if (engine.state === 'loading') engineFailed(ENGINE_FAIL); };
+    }
+
+    // 準備ができたら解決する (準備中なら待つ。使えないなら理由つきで失敗する)
+    function engineReady() {
+      if (engine.state === 'ready') return Promise.resolve();
+      if (engine.state !== 'loading') return Promise.reject(new Error(engine.error));
+      return new Promise((resolve, reject) => engine.waiters.push({ resolve, reject }));
+    }
+
+    // Worker に依頼して、結果 ({result, history}) を待つ。buf (ArrayBuffer) は渡した時点で手放す (transfer)
+    async function engineCall(msg, buf, onProgress) {
+      await engineReady();
+      const id = ++engine.seq;
+      return new Promise((resolve, reject) => {
+        engine.pending.set(id, { resolve, reject, onProgress });
+        engine.worker.postMessage({ ...msg, id, history: buf || null }, buf ? [buf] : []);
+      });
+    }
+
+    // ===== State =====
+    let allRows = [];
+    let fetchedRange = { start: '', end: '' };  // 取得時の開始日・終了日 (CSVのファイル名に使う)
+    let lpPositions = [];
+    let currentFilter = 'all';
+    // 取引一覧の絞り込み (ウォレットのチップ・検索)。表示だけに効き、集計・CSV の対象は変えない
+    let walletFilter = 'all';   // 'all' またはウォレットのアドレス (小文字)
+    let searchQuery = '';       // 小文字・前後の空白なし
+
+    // ===== Fetch Transactions =====
+    // CSVのファイル名に付ける期間 (yymmdd_yymmdd)。日付の指定が無い側は、出力する行の最初・最後の日付
+    function fileRange(rows) {
+      const days = rows.map(r => (r.timestamp || '').slice(0, 10)).filter(Boolean).sort();
+      const ymd = (d) => d ? d.replace(/[-/]/g, '').slice(2) : '';
+      const from = ymd(fetchedRange.start || days[0]);
+      const to = ymd(fetchedRange.end || days[days.length - 1]);
+      return from && to ? `${from}_${to}` : ymd(new Date().toISOString().slice(0, 10));
+    }
+
+    async function fetchTransactions() {
+      const startDate = document.getElementById('startDate').value;
+      const endDate = document.getElementById('endDate').value;
+
+      // Validation: 登録したウォレットをすべて読む (先頭をメインとして扱う)
+      const bad = wallets.filter(w => w.address && !ADDR_RE.test(w.address));
+      if (bad.length) {
+        showError('ウォレットアドレスの形式が正しくありません（0x + 40文字の16進数）: ' + bad.map(w => w.address).join(', '));
+        return;
+      }
+      const addrs = validAddrs();
+      if (!addrs.length) {
+        showError('ウォレットアドレスを入力してください（0x + 40文字の16進数）');
+        return;
+      }
+
+      // UI State
+      hideError();
+      if (engine.state === 'file') { showError(FILE_PROTOCOL_MSG); return; }
+      toggleLoading(true, !!histFile && !document.getElementById('histRefresh').checked);
+      document.getElementById('fetchBtn').disabled = true;
+      document.getElementById('statsCard').style.display = 'none';
+      document.getElementById('resultsCard').style.display = 'none';
+      document.getElementById('emptyState').style.display = 'none';
+      document.getElementById('histBand').classList.remove('visible');
+
+      try {
+        fetchedRange = { start: startDate, end: endDate };
+
+        // 履歴ファイルは、あればいつも渡す (続きだけ取得)。「全履歴を取り直す」なら取得には使わず、違いの確認にだけ使う
+        const refresh = !!(histFile && document.getElementById('histRefresh').checked);
+        const buf = histFile ? await histFile.arrayBuffer() : null;
+        lastProgress = null;
+        const out = await engineCall(
+          { type: 'run', wallets: addrs, startDate, endDate, refresh }, buf, p => { lastProgress = p; });
+        const data = out.result;
+        allRows = data.rows || [];
+        allRows.forEach((r, i) => { r._idx = i; });
+        resetRowFilters();  // 取得し直したら、前の絞り込みは解除する
+
+        // トークン設定表 (出力対象・要確認の行に登場するトークン)
+        tokenMeta = data.tokens || {};
+        renderTokenTable();
+
+        // Warnings (取得上限による欠落の可能性など)
+        const warnEl = document.getElementById('warningMsg');
+        // notices: 取得漏れに気づくための照合結果 (履歴から計算した残高と実際の残高の差など)
+        const msgs = (data.warnings || []).map(w => '⚠️ ' + w).concat((data.notices || []).map(n => 'ℹ️ ' + n));
+        if (msgs.length > 0) {
+          warnEl.textContent = msgs.join('\n');
+          warnEl.style.display = '';
+        } else {
+          warnEl.style.display = 'none';
+        }
+
+        // Update stats
+        document.getElementById('statTotal').textContent = data.total;
+        document.getElementById('statExport').textContent = data.export_count;
+        document.getElementById('statSkip').textContent = data.skip_count;
+        document.getElementById('statReview').textContent = data.review_count;
+        document.getElementById('statReview').parentElement.classList.toggle('has-items', data.review_count > 0);
+
+        // Calculate skipped gas
+        let skipGas = 0;
+        allRows.forEach(r => {
+          if (r.status === 'skip' && r.fee) {
+            skipGas += parseFloat(r.fee) || 0;
+          }
+        });
+        document.getElementById('statSkipGas').textContent = `（ガス代: ${skipGas.toFixed(6)} FLR）`;
+
+        document.getElementById('statsCard').style.display = '';
+
+        // Tab counts
+        document.getElementById('tabAll').textContent = data.total;
+        document.getElementById('tabExport').textContent = data.export_count;
+        document.getElementById('tabSkip').textContent = data.skip_count;
+        document.getElementById('tabReview').textContent = data.review_count;
+
+        if (allRows.length > 0) {
+          renderTable();
+          document.getElementById('resultsCard').style.display = '';
+        } else {
+          document.getElementById('emptyState').style.display = '';
+        }
+
+        // LP positions ledger
+        lpPositions = data.lp_positions || [];
+        if (lpPositions.length > 0) {
+          renderLpTable();
+          document.getElementById('lpCard').style.display = '';
+        } else {
+          document.getElementById('lpCard').style.display = 'none';
+        }
+
+        // 履歴ファイル: 最新のものに差し替える (保存しなくても、同じ画面ではその続きから取得できる)
+        if (data.history && out.history) adoptHistory(data.history, out.history);
+
+      } catch (err) {
+        showError(err.message || 'データの取得に失敗しました。');
+      } finally {
+        toggleLoading(false);
+        document.getElementById('fetchBtn').disabled = false;
+      }
+    }
+
+    // ===== トークン設定 (クリプタクトでの扱い) — XRPL Tax for Cryptact と同じ仕組み =====
+    // 各トークン (キー=コントラクトアドレス、ネイティブFLRは "native") の扱いを3つから選ぶ:
+    //   custom  : クリプタクトに無い。CSVでは USER-<表記>。円価格はツールが付ける。決済通貨にはできない
+    //   priced  : 対応コイン・価格あり。USER-なし、Price空欄でクリプタクトの価格を使う。決済通貨にもできる
+    //   noprice : 対応コイン・価格なし。USER-なし、円価格はツールが付ける。決済通貨にはしない
+    // 優先順位: ユーザーが画面で選んだもの (localStorage) > 組み込みの確認済み > custom
+    const NATIVE = 'native';
+    const WFLR_ADDR = '0x1d80c49bbbcd1c0911346656b529df9e5c2f783d';
+    const TOK_MODES = { custom: 'カスタム（USER-）', priced: '対応コイン・価格あり', noprice: '対応コイン・価格なし', scam: 'SCAM（スパム・出力しない）' };
+    // grid.cryptact.com/coins で確認済み (2026-07-07)
+    const KNOWN_TOKENS = {
+      'native': { symbol: 'FLR', mode: 'priced', note: 'Flare' },
+      [WFLR_ADDR]: { symbol: 'WFLR', mode: 'priced', note: 'Wrapped Flare。クリプタクトの価格データは2025-11-20以降。「WFLRをFLRとして出力」がONならFLRで出力' },
+      '0xe7cd86e13ac4309349f30b3435a9d337750fc82d': { symbol: 'USDT0', mode: 'priced', note: 'USD₮0。クリプタクトではUSDT0' },
+      '0xfbda5f676cb37624f28265a144a48b0d6e87d3b6': { symbol: 'USDCE', mode: 'priced', note: 'USDC.e（Stargate）。クリプタクトではUSDCE' },
+      '0x0b38e83b86d491735feaa0a791f65c2b99535396': { symbol: 'USDT', mode: 'priced', note: 'Tether USD。クリプタクトのUSDTと同じ価格として扱う' },
+      '0xe6505f92583103af7ed9974dec451a7af4e3a3be': { symbol: 'JOULE', mode: 'priced', note: 'Joule。価格データは2024-03-15以降' },
+      '0x1502fa4be69d526124d453619276faccab275d3d': { symbol: 'ETH', mode: 'priced', same: true, note: 'WETH（Stargate でブリッジした ETH）。ETHとして扱う（2026-11-01決定、FXRP→XRP と同じ考え方）。クリプタクトのWETHは別コインなので使わない' },
+      '0x9aa42de5ec6f3b3bbf252bf8ac81acb338d888b7': { symbol: 'GANJA', mode: 'custom', note: 'GanjaFlare。クリプタクトに無し（2026-10-01確認）' },
+      '0x140d8d3649ec605cf69018c627fb44ccc76ec89f': { symbol: 'HELION', mode: 'noprice', note: 'Helion。HLNのままだと別物のHolonusになるのでHELION。取引時点の価格データなし' },
+      '0x12e605bc104e93b45e1ad99f9e555f659051c2bb': { symbol: 'SFLR', mode: 'noprice', note: 'Sceptre Staked FLR。クリプタクトにSFLRはあるが価格データなし' },
+      '0xad552a648c74d49e10027ab8a618a3ad4901c5be': { symbol: 'XRP', mode: 'priced', same: true, note: 'FXRP（Flare Bridged XRP）。XRPとして扱う（2026-10-03決定、XRPL Tax側と共通）。ミント・償還はXRPと同じコインなので記録しない' },
+      '0x657097cc15fdec9e383db8628b57ea4a763f2ba0': { symbol: 'SPRK', mode: 'custom', note: 'SparkDEX。クリプタクトのSPRKは別物（Sparkster）なのでカスタム' },
+      '0xd38220cff996a73e9110aaca64e02d581b83a0cd': { symbol: 'JOULE', mode: 'priced', same: true, note: 'Kii。JOULEをステーキングするためのトークンで、JOULEと1:1で交換・解除できるのでJOULEとして出力（WFLR→FLRと同じ考え方）' },
+      '0xff56eb5b1a7faa972291117e5e9565da29bc808d': { symbol: 'APS', mode: 'custom', note: 'Apsis。クリプタクトに無し' },
+      '0x96b41289d90444b8add57e6f265db5ae8651df29': { symbol: 'EUSDT', mode: 'custom', note: 'Enosys USDT。クリプタクトに無し' },
+      '0x4c18ff3c89632c3dd62e796c0afa5c07c4c1b2b3': { symbol: 'STXRP', mode: 'custom', note: 'Firelight stXRP。クリプタクトに無し' },
+      '0x0988c6ba244a90c07a917ebe609eb3264be716ff': { symbol: 'STFLR', mode: 'custom', note: 'SparkDEX Staked FLR。クリプタクトに無し' },
+      '0x26a1fab310bd080542dc864647d05985360b16a5': { symbol: 'FLRETH', mode: 'custom', note: 'Flare Staked Ether（Dinero）。クリプタクトに無し' },
+      '0x6cd3a5ba46fa254d4d2e3c2b37350ae337e94a0f': { symbol: 'CDP', mode: 'custom', note: 'CDP Dollar（Enosys Loans）。クリプタクトに無し' },
+      '0x0b28416ad07a7e20cd29b6a7693e020e49894c3f': { symbol: 'USD.a', mode: 'scam', note: 'Atomic Dollar • Gitos.org（現 Flare Dollar • Owem.org）。URLに誘導するスパム' },
+    };
+    let tokenMeta = {};  // バックエンドの data.tokens: {アドレス: {symbol, name}}
+
+    function getTokenSettings() {
+      try { return JSON.parse(localStorage.getItem('tokenSettings') || '{}'); }
+      catch (_) { return {}; }
+    }
+    function saveTokenSettings(ts) {
+      try { localStorage.setItem('tokenSettings', JSON.stringify(ts)); } catch (_) {}
+    }
+    // カスタムコインに使える文字 (半角英大文字・数字・#) だけにする
+    function coinSymbol(s) {
+      return String(s || '').toUpperCase().replace(/[^A-Z0-9#]/g, '') || 'TOKEN';
+    }
+    // 主要トークンの名前を名乗る、確認済みと違うアドレスのトークン = 偽物 (アドレスポイズニング等)。
+    // 既定で SCAM にする (画面のトークン設定で変更可)
+    const IMPERSONATED = new Set(['FLR', 'WFLR', 'USD₮0', 'USDT0', 'USDC.e', 'USDT', 'FXRP', 'XRP', 'sFLR', 'WETH', 'JOULE']);
+    function tokenInfo(addr, rawSymbol) {
+      const saved = getTokenSettings()[addr] || {};
+      const known = KNOWN_TOKENS[addr];
+      const fake = !known && addr !== NATIVE && IMPERSONATED.has(rawSymbol);
+      const mode = saved.mode || (known && known.mode) || (fake ? 'scam' : 'custom');
+      const symbol = saved.symbol || (known && known.symbol) || coinSymbol(rawSymbol);
+      return {
+        mode, symbol,
+        checked: saved.mode ? 'user' : known ? 'builtin' : '',
+        note: known ? known.note : fake ? `${rawSymbol} を名乗る偽トークン（本物とアドレスが違う）。アドレスポイズニングに注意` : '',
+      };
+    }
+    // CSVに書く表記 (WFLR→FLR変換、カスタムは USER- を付ける)
+    function csvSymbol(addr, rawSymbol, convertWflr) {
+      if (!rawSymbol || rawSymbol === 'JPY') return rawSymbol;
+      if (!addr) return rawSymbol;  // アドレス不明 (通常は起きない) はそのまま
+      if (convertWflr && addr === WFLR_ADDR) return 'FLR';
+      const i = tokenInfo(addr, rawSymbol);
+      return i.mode === 'custom' ? 'USER-' + i.symbol : i.symbol;
+    }
+
+    // 同じコインとして別の表記で出すトークン (FXRP→XRP など) の注記。「FXRP は XRP」
+    function sameCoinNote(row) {
+      const notes = [[row.base_token, row.base], [row.counter_token, row.counter]]
+        .filter(([a, raw]) => a && KNOWN_TOKENS[a] && KNOWN_TOKENS[a].same && tokenInfo(a, raw).symbol === KNOWN_TOKENS[a].symbol && raw !== KNOWN_TOKENS[a].symbol)
+        .map(([a, raw]) => `${raw} は ${KNOWN_TOKENS[a].symbol}`);
+      return [...new Set(notes)].join('、');
+    }
+
+    function setTokenMode(addr, mode) {
+      const ts = getTokenSettings();
+      ts[addr] = { ...(ts[addr] || {}), mode };
+      saveTokenSettings(ts);
+      renderTokenTable();
+      if (allRows.length) renderTable();
+    }
+    function setTokenSymbol(addr, input) {
+      const ts = getTokenSettings();
+      const cur = tokenInfo(addr, (tokenMeta[addr] || {}).symbol);
+      const v = cur.mode === 'custom' ? coinSymbol(input.value) : input.value.trim();
+      // 表記だけ変えた場合も、今の扱いを「自分で確認済み」として保存する
+      ts[addr] = { ...(ts[addr] || {}), mode: (ts[addr] || {}).mode || cur.mode, symbol: v || undefined };
+      saveTokenSettings(ts);
+      renderTokenTable();
+    }
+    function resetToken(addr) {
+      const ts = getTokenSettings();
+      delete ts[addr];
+      saveTokenSettings(ts);
+      renderTokenTable();
+      if (allRows.length) renderTable();
+    }
+
+    function renderTokenTable() {
+      const body = document.getElementById('tokenBody');
+      if (!body) return;
+      // 出力対象・要確認の行に登場するトークンを数える
+      const cnt = {};
+      const add = (addr, st) => {
+        if (!addr) return;
+        cnt[addr] = cnt[addr] || { export: 0, review: 0 };
+        if (st === 'export' || st === 'review') cnt[addr][st]++;
+      };
+      allRows.forEach(r => {
+        if (r.status !== 'export' && r.status !== 'review') return;
+        add(r.base_token, r.status);
+        if (r.counter && r.counter !== 'JPY') add(r.counter_token, r.status);
+      });
+      const addrs = Object.keys(cnt).sort((a, b) =>
+        (cnt[b].export + cnt[b].review) - (cnt[a].export + cnt[a].review));
+      document.getElementById('tokenCount').textContent = ` — ${addrs.length}種`;
+
+      const convertWflr = document.getElementById('convertWflr').checked;
+      body.innerHTML = addrs.map(addr => {
+        const meta = tokenMeta[addr] || {};
+        const i = tokenInfo(addr, meta.symbol);
+        const opts = Object.entries(TOK_MODES).map(([v, l]) =>
+          `<option value="${v}"${i.mode === v ? ' selected' : ''}>${l}</option>`).join('');
+        const addrCell = addr === NATIVE
+          ? '<span style="color: var(--muted);">ネイティブ</span>'
+          : `<a class="tx-link" href="https://flare-explorer.flare.network/token/${addr}" target="_blank" rel="noopener">${addr.slice(0, 8)}…${addr.slice(-4)}</a>`;
+        const wflrAsFlr = convertWflr && addr === WFLR_ADDR;
+        const badge = i.checked === 'user'
+          ? `<span class="status-badge status-export">✓ 確認済み（自分）</span> <a href="#" onclick="resetToken('${addr}'); return false;" style="color: var(--muted); font-size: 0.68rem;">戻す</a>`
+          : i.checked
+            ? '<span class="status-badge status-export">✓ 確認済み</span>'
+            : '<a class="status-badge status-review" style="text-decoration:none;" href="https://grid.cryptact.com/coins" target="_blank" rel="noopener">未確認 → 対応コインリスト</a>';
+        return `<tr title="${escapeHtml(i.note || meta.name || '')}">
+          <td><strong>${escapeHtml(meta.symbol || i.symbol)}</strong> <span style="color: var(--muted); font-size: 0.7rem;">${escapeHtml(meta.name || '')}</span></td>
+          <td>${addrCell}</td>
+          <td style="font-family: var(--mono); font-size: 0.74rem;">${cnt[addr].export} / ${cnt[addr].review}</td>
+          <td><select class="action-select" onchange="setTokenMode('${addr}', this.value)"${wflrAsFlr ? ' disabled' : ''}>${opts}</select></td>
+          <td>${wflrAsFlr
+            ? '<span style="font-family: var(--mono); font-weight: 700;">FLR</span> <span style="color: var(--muted); font-size: 0.68rem;">（WFLR→FLR変換中）</span>'
+            : `${i.mode === 'custom' ? '<span style="font-family: var(--mono); color: var(--muted);">USER-</span>' : ''}<input class="sym-input" value="${escapeHtml(i.symbol)}" onchange="setTokenSymbol('${addr}', this)" spellcheck="false">`}</td>
+          <td>${badge}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // ===== ウォレット一覧 (XRPL Tax for Cryptact と同じ形。localStorage 'flareWallets'、最大20件) =====
+    // 登録したアドレスはすべて同じ持ち主としてまとめて読む。先頭の有効なアドレスがメイン
+    const MAX_WALLETS = 20;
+    const ADDR_RE = /^0x[a-fA-F0-9]{40}$/;
+    let wallets = [];
+    function cleanWallets(list) {
+      return list.filter(w => w && typeof w.address === 'string').slice(0, MAX_WALLETS)
+        .map(w => ({ label: String(w.label || ''), address: w.address.trim() }));
+    }
+    // 旧形式 (メイン1件 + メインごとの追加アドレス) → 一覧
+    function walletsFromLegacy(recent, extraMap) {
+      const main = (recent && recent[0]) || '';
+      const list = [{ label: main ? 'メイン' : '', address: main }];
+      ((extraMap || {})[main.toLowerCase()] || []).forEach(a => list.push({ label: '', address: a }));
+      return list;
+    }
+    function loadWallets() {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem('flareWallets') || 'null'); } catch (_) {}
+      if (Array.isArray(saved) && saved.length) { wallets = cleanWallets(saved); return; }
+      let recent = [], extra = {};
+      try { recent = JSON.parse(localStorage.getItem('recentWallets') || '[]'); } catch (_) {}
+      try { extra = JSON.parse(localStorage.getItem('extraWallets') || '{}'); } catch (_) {}
+      wallets = walletsFromLegacy(recent, extra);
+    }
+    function saveWallets() {
+      try { localStorage.setItem('flareWallets', JSON.stringify(wallets)); } catch (_) {}
+    }
+    function renderWallets() {
+      document.getElementById('wlist').innerHTML = wallets.map((w, i) => `<div class="wrow">
+        <input class="wl" placeholder="名前（例: メイン）" value="${escapeHtml(w.label)}" oninput="wallets[${i}].label = this.value; saveWallets(); renderHistPlan()">
+        <button type="button" class="wd" title="削除" onclick="removeWallet(${i})">×</button>
+        <input class="wa${w.address && !ADDR_RE.test(w.address) ? ' bad' : ''}" placeholder="0x..." maxlength="42" spellcheck="false" autocomplete="off"
+          value="${escapeHtml(w.address)}" oninput="setWalletAddress(${i}, this)">
+      </div>`).join('');
+      document.getElementById('wAdd').disabled = wallets.length >= MAX_WALLETS;
+      fitWalletList();
+    }
+    // 一覧の高さを5件分までにする (行の高さはフォント等で変わるので実測)
+    const WLIST_VISIBLE = 5;
+    function fitWalletList() {
+      const list = document.getElementById('wlist');
+      const rows = list.querySelectorAll('.wrow');
+      if (rows.length <= WLIST_VISIBLE) { list.style.maxHeight = ''; return; }
+      const top = rows[0].getBoundingClientRect().top;
+      const bottom = rows[WLIST_VISIBLE - 1].getBoundingClientRect().bottom;
+      list.style.maxHeight = `${Math.ceil(bottom - top) + 2}px`;
+    }
+    function setWalletAddress(i, input) {
+      wallets[i].address = input.value.trim();
+      input.classList.toggle('bad', !!wallets[i].address && !ADDR_RE.test(wallets[i].address));
+      saveWallets();
+      refreshHistPlan();
+    }
+    function addWallet() {
+      if (wallets.length >= MAX_WALLETS) return;
+      wallets.push({ label: '', address: '' });
+      saveWallets(); renderWallets();
+      // 追加した行 (一番下) を見せて、名前欄に入力できるようにする
+      const list = document.getElementById('wlist');
+      list.scrollTop = list.scrollHeight;
+      const labels = list.querySelectorAll('.wl');
+      labels[labels.length - 1].focus();
+    }
+    function removeWallet(i) {
+      wallets.splice(i, 1);
+      if (!wallets.length) wallets.push({ label: '', address: '' });
+      saveWallets(); renderWallets(); refreshHistPlan();
+    }
+    // 行の 📍 表示用: 登録した名前、無ければ短縮アドレス
+    function walletName(addr) {
+      const w = wallets.find(x => x.address.toLowerCase() === addr.toLowerCase());
+      return (w && w.label) || `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+    }
+
+    // ===== 設定ファイル (ウォレット・トークン設定・アドレス帳をまとめて保存/復元) =====
+    function exportSettings() {
+      let excluded = [];
+      try { excluded = JSON.parse(localStorage.getItem('lpExcludedPools') || '[]'); } catch (_) {}
+      const data = {
+        app: 'flare-tax', version: 2,
+        wallets,
+        tokens: getTokenSettings(),
+        book: getAddressBook(),
+        excludedPools: excluded,
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // 保存した日が分かる名前にする (flare-wallet-listyymmdd.json)。最新のファイルを見分けるため
+      const d = new Date();
+      const yymmdd = String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+      a.download = `flare-wallet-list${yymmdd}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+    function importSettings(input) {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const d = JSON.parse(reader.result);
+          if (d.app !== 'flare-tax') throw new Error('Flare Tax の設定ファイルではありません');
+          if (Array.isArray(d.wallets) && d.wallets.length) {
+            // version 1 はアドレスの文字列 + メインごとの追加アドレス
+            const list = typeof d.wallets[0] === 'string'
+              ? walletsFromLegacy(d.wallets, d.extraWallets) : cleanWallets(d.wallets);
+            if (list.length) { wallets = list; saveWallets(); renderWallets(); refreshHistPlan(); }
+          }
+          if (d.tokens && typeof d.tokens === 'object') saveTokenSettings(d.tokens);
+          if (d.book && typeof d.book === 'object') saveAddressBook(d.book);
+          if (Array.isArray(d.excludedPools)) localStorage.setItem('lpExcludedPools', JSON.stringify(d.excludedPools));
+          if (allRows.length) { renderTokenTable(); renderTable(); }
+          if (lpPositions.length) renderLpTable();
+          hideError();
+          alert('設定を読み込みました');
+        } catch (e) {
+          showError('設定ファイルを読み込めませんでした: ' + e.message);
+        }
+        input.value = '';
+      };
+      reader.readAsText(file);
+    }
+
+    // ===== アドレス帳 (localStorage、このブラウザのみ。登録は任意) =====
+    const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
+    function getAddressBook() {
+      try { return JSON.parse(localStorage.getItem('addressBook') || '{}'); }
+      catch (_) { return {}; }
+    }
+    function saveAddressBook(book) {
+      localStorage.setItem('addressBook', JSON.stringify(book));
+    }
+    function registerAddress(addr) {
+      const book = getAddressBook();
+      const cur = book[addr] || { label: '', self: false };
+      const label = prompt(`このアドレスに名前を付けます（空欄でOKすると登録解除）:\n${addr}`, cur.label);
+      if (label === null) return;
+      if (label.trim() === '') {
+        delete book[addr];
+      } else {
+        const self = confirm('自分のウォレットとして扱いますか？\n\nOK = 自分（送金扱いになり、CSV出力対象から外れます）\nキャンセル = 名前の表示だけ（判断はレビューのまま）');
+        book[addr] = { label: label.trim(), self };
+      }
+      saveAddressBook(book);
+      renderTable();
+    }
+    // CSVに含めるかどうか。ユーザーがチェックを触った行はその値 (row._checked)、
+    // 触っていない行は「出力対象、かつ自分宛ての送金ではない」を既定にする。
+    // 画面の表示 (タブ) とは無関係にデータ側で持つので、タブ切替や再描画で消えない。
+    function isScam(row) {
+      // 報酬の引換券トークン (本物と同じ名前で届いてすぐ焼却される) は通過扱いで、詐欺ではない
+      if ((row.comment || '').startsWith('[Pass-through]')) return false;
+      return !!row.base_token && tokenInfo(row.base_token, row.base).mode === 'scam';
+    }
+
+    // ===== Cryptact に書く行の組み立て (Swap の書き分けと円価格) =====
+    // カスタムコインは主軸通貨 (Base) にしか書けず、価格の無いトークンは円換算できない。
+    //   受け取った側に価格あり → 1行 SELL 送った側 / Counter 受け取った側
+    //   送った側だけ価格あり   → 1行 BUY 受け取った側 / Counter 送った側
+    //   両方とも価格なし       → 円を挟んだ2行 (SELL→JPY、BUY←JPY)
+    // 価格の無いトークンが主軸の行には、バックエンドが計算した円価格 (row.jpy) を入れる。
+    function isPricedToken(addr, sym, convertWflr) {
+      if (!addr) return true;  // アドレス不明 (通常は起きない) は従来どおり
+      if (addr === NATIVE || (convertWflr && addr === WFLR_ADDR)) return true;
+      return tokenInfo(addr, sym).mode === 'priced';
+    }
+    function isSwapRow(row) {
+      return row.action === 'SELL' && row.counter && row.counter !== 'JPY' && row.price;
+    }
+    function num(s) { return Number(s || 0); }
+    // 画面表示用の数値 (1以上は小数6桁まで、1未満は有効数字6桁)。CSVには使わない
+    function dispNum(s) {
+      const n = Number(s);
+      if (s === '' || s == null || !isFinite(n)) return escapeHtml(String(s ?? ''));
+      return Math.abs(n) >= 1
+        ? n.toLocaleString('en-US', { maximumFractionDigits: 6 })
+        : n.toLocaleString('en-US', { maximumSignificantDigits: 6 });
+    }
+    function fmtNum(n) {
+      if (!isFinite(n)) return '';
+      const s = Number(n.toPrecision(15)).toString();
+      return /e/.test(s) ? n.toFixed(20).replace(/0+$/, '').replace(/\.$/, '') : s;
+    }
+    const PRICE_NEEDED = new Set(['BUY', 'SELL', 'BONUS', 'LOSS']);
+    // 出力する行の配列 (フィールドはCSVの列) と、円価格が足りない行があるか
+    // クリプタクトは、手数料の通貨が主軸通貨 (Base) でも決済通貨 (Counter) でもない行を弾く
+    // (例: BONUS USER-CDP に FeeCcy=FLR。手数料が0でも「無効な値」になる)。
+    // その場合は行の手数料を 0・主軸通貨にし、ガス代があれば SENDFEE の行に分けて経費として残す
+    function buildCsvRows(row, convertWflr) {
+      const res = buildCsvRowsRaw(row, convertWflr);
+      const lines = [];
+      for (const l of res.lines) {
+        if (!l.feeCcy || l.feeCcy === l.b || l.feeCcy === l.c || l.feeCcy === 'JPY') { lines.push(l); continue; }
+        if (num(l.fee) > 0) {
+          lines.push({ ...l, action: 'SENDFEE', b: l.feeCcy, vol: l.fee, price: '', c: 'JPY', fee: '0',
+            comment: `${row.comment}（ガス代）` });
+        }
+        lines.push({ ...l, fee: '0', feeCcy: l.b });
+      }
+      return { ...res, lines };
+    }
+    function buildCsvRowsRaw(row, convertWflr) {
+      const sym = (addr, s) => s === 'JPY' ? 'JPY' : csvSymbol(addr, s, convertWflr);
+      const jpy = row.jpy || {};
+      const basis = jpy.basis ? ` / JPY: ${jpy.basis}` : '';
+      const base = {
+        ts: row.timestamp, source: row.source,
+        fee: row.fee, feeCcy: row.fee_ccy === 'FLR' ? csvSymbol(NATIVE, 'FLR', convertWflr) : row.fee_ccy,
+        comment: row.comment,
+      };
+      if (isSwapRow(row)) {
+        // 受け取った量はバックエンドが丸めずに持っている (counter_volume)。交換比率から逆算すると数量がずれる
+        const cv = row.counter_volume || '';
+        const sv = num(row.volume), rv = cv ? num(cv) : sv * num(row.price);
+        const bPriced = isPricedToken(row.base_token, row.base, convertWflr);
+        const cPriced = isPricedToken(row.counter_token, row.counter, convertWflr);
+        if (cPriced) {
+          return { lines: [{ ...base, action: 'SELL', b: sym(row.base_token, row.base), vol: row.volume, price: row.price, c: sym(row.counter_token, row.counter) }], missing: false };
+        }
+        if (bPriced) {
+          return { lines: [{ ...base, action: 'BUY', b: sym(row.counter_token, row.counter), vol: cv || fmtNum(rv), price: fmtNum(sv / rv), c: sym(row.base_token, row.base) }], missing: false };
+        }
+        const missing = !jpy.base || !jpy.counter;
+        return {
+          missing,
+          lines: [
+            { ...base, action: 'SELL', b: sym(row.base_token, row.base), vol: row.volume, price: jpy.base || '', c: 'JPY', comment: row.comment + basis },
+            { ...base, action: 'BUY', b: sym(row.counter_token, row.counter), vol: cv || fmtNum(rv), price: jpy.counter || '', c: 'JPY', fee: '0', comment: row.comment + basis },
+          ],
+        };
+      }
+      const bPriced = row.base === 'JPY' || isPricedToken(row.base_token, row.base, convertWflr);
+      const needs = !bPriced && PRICE_NEEDED.has(row.action);
+      const price = !bPriced && jpy.base ? jpy.base : row.price;
+      return {
+        missing: needs && !jpy.base,
+        lines: [{ ...base, action: row.action, b: sym(row.base_token, row.base), vol: row.volume, price,
+          c: row.counter === 'JPY' ? 'JPY' : sym(row.counter_token, row.counter), comment: row.comment + (!bPriced && jpy.base ? basis : '') }],
+      };
+    }
+    // 出力対象なのに円価格が取れていない (このままだとクリプタクトで円換算できない) 行
+    function lacksPrice(row) {
+      if (row.status !== 'export') return false;
+      return buildCsvRows(row, document.getElementById('convertWflr').checked).missing;
+    }
+    function isChecked(row, book) {
+      if (row._checked !== undefined) return row._checked;
+      if (isScam(row)) return false;
+      if (lacksPrice(row)) return false;
+      const e = row.counterparty ? book[row.counterparty] : null;
+      return row.status === 'export' && !(e && e.self);
+    }
+    function toggleRow(idx, checked) {
+      allRows[idx]._checked = checked;
+      updateSelCount();
+    }
+    function updateSelCount() {
+      const book = getAddressBook();
+      const n = allRows.filter(r => isChecked(r, book)).length;
+      const el = document.getElementById('selCount');
+      const d = (v) => v ? v.replace(/-/g, '/') : '';
+      const { start, end } = fetchedRange;
+      // 同じ年なら終了日の年は省く (操作バーを1行に収めるため)
+      const endTxt = start && end && start.slice(0, 4) === end.slice(0, 4) ? d(end).slice(5) : d(end);
+      const range = start || end ? `${d(start) || '最初'}〜${endTxt || '最新'}` : '全期間';
+      if (el) el.textContent = `CSVに出力: ${n.toLocaleString()}行（${range}）`;
+    }
+
+    // 「自分」登録済みの相手との送受金は送金扱い(スキップ相当)として表示する
+    function effectiveStatus(row, book) {
+      if (isScam(row)) return 'scam';
+      if (lacksPrice(row)) return 'review';
+      const e = row.counterparty ? book[row.counterparty] : null;
+      return (e && e.self) ? 'skip' : row.status;
+    }
+
+    // ===== 取引一覧の絞り込み (ウォレット・検索) =====
+    // 表示だけを絞る。CSV に出す行 (isChecked)・集計カード・「CSVに出力: N行」には一切関わらない
+    const STATUS_LABEL = { export: '出力', skip: 'スキップ', review: '要確認', scam: 'SCAM' };
+    const rowWalletKey = (row) => (row.wallet || '').toLowerCase();
+    function rowInScope(row) {
+      if (walletFilter !== 'all' && rowWalletKey(row) !== walletFilter) return false;
+      if (!searchQuery) return true;
+      const hay = [row.comment, row.base, row.counter, row.tx_hash, row.counterparty,
+        row.wallet ? walletName(row.wallet) : '', row.timestamp, row.action]
+        .map(v => String(v ?? '')).join('\n').toLowerCase();
+      return hay.includes(searchQuery);
+    }
+    // ウォレットごとのチップ (すべて + 名前 件数 + 要確認)。行のあるウォレットが1つだけなら出さない
+    function renderWalletChips(effOf) {
+      const box = document.getElementById('walletChips');
+      const stat = new Map();  // アドレス(小文字) → { n, review }
+      allRows.forEach(r => {
+        const k = rowWalletKey(r);
+        const s = stat.get(k) || { n: 0, review: 0 };
+        s.n++;
+        if (effOf.get(r) === 'review') s.review++;
+        stat.set(k, s);
+      });
+      if (stat.size < 2) {
+        box.innerHTML = '';
+        if (walletFilter !== 'all') walletFilter = 'all';
+      } else {
+        if (walletFilter !== 'all' && !stat.has(walletFilter)) walletFilter = 'all';
+        // 登録順に並べる (一覧に無いアドレスは最後)
+        const order = k => { const i = wallets.findIndex(w => (w.address || '').toLowerCase() === k); return i < 0 ? 999 : i; };
+        const keys = [...stat.keys()].sort((a, b) => order(a) - order(b));
+        const chip = (key, label, n, review, title) => {
+          const on = walletFilter === key ? ' active' : '';
+          const rv = review ? `<span class="wchip-r">・要確認 ${review.toLocaleString()}</span>` : '';
+          return `<button type="button" class="wchip${on}" data-w="${escapeHtml(key)}" title="${escapeHtml(title || label)}" aria-pressed="${!!on}">`
+            + `<span class="wchip-name">${escapeHtml(label)}</span><span class="wchip-n">${n.toLocaleString()}</span>${rv}</button>`;
+        };
+        box.innerHTML = chip('all', 'すべて', allRows.length, 0)
+          + keys.map(k => {
+            const s = stat.get(k);
+            return chip(k, k ? walletName(k) : 'その他', s.n, s.review, k ? `${walletName(k)}（${k}）` : '');
+          }).join('');
+      }
+      const filtering = walletFilter !== 'all' || !!searchQuery;
+      document.getElementById('txScope').hidden = !filtering;
+      document.getElementById('txSearchClear').hidden = !searchQuery;
+    }
+    function resetRowFilters() {
+      walletFilter = 'all';
+      searchQuery = '';
+      const input = document.getElementById('txSearch');
+      if (input) input.value = '';
+    }
+    (function initRowFilters() {
+      let timer = null;
+      const input = document.getElementById('txSearch');
+      // 入力のたびに表だけ描き直す (入力欄は描き直さないのでフォーカスは外れない)。150ms ほど間引く
+      input.addEventListener('input', () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => { searchQuery = input.value.trim().toLowerCase(); renderTable(); }, 150);
+      });
+      const clearSearch = () => { clearTimeout(timer); input.value = ''; searchQuery = ''; };
+      document.getElementById('txSearchClear').addEventListener('click', () => { clearSearch(); renderTable(); input.focus(); });
+      document.getElementById('txScopeClear').addEventListener('click', () => { clearSearch(); walletFilter = 'all'; renderTable(); });
+      document.getElementById('walletChips').addEventListener('click', e => {
+        const b = e.target.closest('.wchip');
+        if (!b) return;
+        walletFilter = b.dataset.w;
+        renderTable();
+      });
+    })();
+
+    // ===== Render Table =====
+    function renderTable() {
+      const book = getAddressBook();
+      const tbody = document.getElementById('txBody');
+      // 行ごとの表示上の状態 (判定は重いので1回だけ求める)
+      const effOf = new Map(allRows.map(r => [r, effectiveStatus(r, book)]));
+
+      // 上の「集計」カードは絞り込みに関係なく全体の件数 (CSV に出る範囲と一致させる)
+      const totals = { export: 0, skip: 0, review: 0, scam: 0 };
+      allRows.forEach(r => { const e = effOf.get(r); totals[e] = (totals[e] || 0) + 1; });
+      document.getElementById('statExport').textContent = totals.export || 0;
+      document.getElementById('statSkip').textContent = totals.skip || 0;
+      document.getElementById('statReview').textContent = totals.review || 0;
+      document.getElementById('statReview').parentElement.classList.toggle('has-items', (totals.review || 0) > 0);
+
+      // 状態タブの件数は、ウォレット・検索で絞り込んだ範囲の件数
+      const scoped = allRows.filter(rowInScope);
+      const counts = { export: 0, skip: 0, review: 0, scam: 0 };
+      scoped.forEach(r => { const e = effOf.get(r); counts[e] = (counts[e] || 0) + 1; });
+      document.getElementById('tabAll').textContent = scoped.length;
+      document.getElementById('tabExport').textContent = counts.export || 0;
+      document.getElementById('tabSkip').textContent = counts.skip || 0;
+      document.getElementById('tabReview').textContent = counts.review || 0;
+      document.getElementById('tabScam').textContent = counts.scam || 0;
+      renderWalletChips(effOf);
+
+      const filtered = currentFilter === 'all'
+        ? scoped
+        : scoped.filter(r => effOf.get(r) === currentFilter);
+      // 登録ウォレットが2件以上のときだけ、行にどのウォレットかを出す
+      const multiWallet = wallets.filter(w => ADDR_RE.test(w.address)).length > 1;
+
+      tbody.innerHTML = filtered.length ? filtered.map((row, i) => {
+        const origIdx = row._idx;
+        const entry = row.counterparty ? book[row.counterparty] : null;
+        const isSelf = !!(entry && entry.self);
+        const checked = isChecked(row, book) ? 'checked' : '';
+        const eff = effOf.get(row);
+        const rowClass = eff === 'scam' ? 'row-scam' : isSelf ? 'row-skip' : `row-${eff}`;
+        const rowTitle = eff === 'scam'
+          ? ' title="詐欺・スパムの疑いがあるトークンです。相手先やトークンのサイトは開かないでください"' : '';
+        const shortHash = row.tx_hash
+          ? `${row.tx_hash.slice(0, 6)}…${row.tx_hash.slice(-4)}`
+          : '';
+        const [date, time] = String(row.timestamp || '').split(' ');
+        const fee = num(row.fee) ? `<span title="${escapeHtml(row.fee)}">${dispNum(row.fee)}</span> ${escapeHtml(row.fee_ccy)}` : '–';
+
+        // 相手先アドレス行 (送受金のみ counterparty がある)
+        let cpHtml = '';
+        const ownWallet = row.counterparty
+          && wallets.some(w => (w.address || '').toLowerCase() === row.counterparty.toLowerCase());
+        // 登録ウォレットと先頭・末尾が同じで中身が違うアドレス = なりすまし (アドレスポイズニング) の疑い
+        const cp = (row.counterparty || '').toLowerCase();
+        const lookalike = cp && !ownWallet && wallets.find(w => {
+          const a = (w.address || '').toLowerCase();
+          return a.length === 42 && a.slice(0, 6) === cp.slice(0, 6) && a.slice(-4) === cp.slice(-4);
+        });
+        if (ownWallet) {
+          // 登録済みのウォレット同士の移動: アドレス帳への登録は不要なので、ウォレット名だけ出す
+          cpHtml = `<div class="cm-sub">↳ 相手: <strong>${escapeHtml(walletName(row.counterparty))}</strong>（登録ウォレット）</div>`;
+        } else if (lookalike || (cp && isScam(row))) {
+          // 偽物の相手を「自分」と登録してしまわないよう、登録リンクは出さない
+          const shortCp = `${row.counterparty.slice(0, 8)}…${row.counterparty.slice(-4)}`;
+          const warn = lookalike
+            ? `⚠ ${escapeHtml(walletName(lookalike.address))} に似せた別のアドレス（なりすまし）`
+            : '⚠ 詐欺トークンの相手（登録不要）';
+          cpHtml = `<div class="cm-sub">↳ 相手: <span style="font-family:var(--font-mono);">${shortCp}</span> <strong style="color: var(--warn);">${warn}</strong></div>`;
+        } else if (row.counterparty && row.counterparty !== ZERO_ADDR) {
+          const shortCp = `${row.counterparty.slice(0, 8)}…${row.counterparty.slice(-4)}`;
+          const lbl = entry ? ` <strong>${escapeHtml(entry.label)}${entry.self ? '（自分）' : ''}</strong>` : '';
+          const link = ` <a href="#" onclick="registerAddress('${row.counterparty}'); return false;" style="color: var(--clr-primary);">${entry ? '編集' : '登録'}</a>`;
+          cpHtml = `<div class="cm-sub">↳ 相手: <span style="font-family:var(--font-mono);">${shortCp}</span>${lbl}${link}</div>`;
+        }
+
+        const actionOptionsHtml = Object.entries(ACTION_OPTIONS).map(([val, label]) => {
+          const selected = row.action === val ? 'selected' : '';
+          // 幅を取らないよう表示はコードだけ (日本語の説明はツールチップ)
+          return `<option value="${val}" title="${label}" ${selected}>${val}</option>`;
+        });
+        
+        if (!ACTION_OPTIONS[row.action]) {
+          actionOptionsHtml.unshift(`<option value="${row.action}" selected>${row.action}</option>`);
+        }
+
+        const selectHtml = `
+          <select class="action-select" data-idx="${origIdx}" title="${escapeHtml(ACTION_OPTIONS[row.action] || row.action)}" onchange="updateAction(this)">
+            ${actionOptionsHtml.join('')}
+          </select>
+        `;
+
+        const badge = eff === 'scam'
+          ? '<span class="status-badge status-scam">SCAM</span>'
+          : isSelf
+            ? '<span class="status-badge status-skip">送金(自分)</span>'
+            : `<span class="status-badge status-${eff}">${STATUS_LABEL[eff] || escapeHtml(eff)}</span>`;
+        // 円価格 (価格の無いトークン) の表示
+        // CSV で実際に使う円価格だけを出す (単価と、数量をかけた合計)。
+        // クリプタクトの時価を使う行 (価格ありのコイン。FXRP→XRP など) はその旨だけ出す
+        let jpyHtml = '';
+        const csv = buildCsvRows(row, document.getElementById('convertWflr').checked);
+        const jpyLines = csv.lines.filter(l => l.c === 'JPY' && l.price);
+        const same = sameCoinNote(row);
+        const sameTxt = same ? `／${escapeHtml(same)}` : '';
+        if (jpyLines.length) {
+          const parts = jpyLines.map(l => `${escapeHtml(l.b)} ¥${dispNum(l.price)}/枚 × ${dispNum(l.vol)} ≈ ¥${Math.round(num(l.price) * num(l.vol)).toLocaleString('ja-JP')}`);
+          jpyHtml = `<div class="cm-jpy" title="${escapeHtml((row.jpy && row.jpy.basis) || '')}">💴 ${parts.join(' / ')}（自動）${sameTxt}</div>`;
+        } else if (row.status === 'export' && PRICE_NEEDED.has(row.action) && !csv.missing && csv.lines.length) {
+          // ガス代を分けた SENDFEE 行ではなく、本体の行を見る
+          const l = csv.lines.find(x => x.action !== 'SENDFEE') || csv.lines[0];
+          jpyHtml = l.c && l.c !== 'JPY'
+            ? `<div class="cm-jpy">💴 ${escapeHtml(l.c)} のクリプタクト時価で計算（CSV: ${escapeHtml(l.action)} ${escapeHtml(l.b)}${sameTxt}）</div>`
+            : `<div class="cm-jpy">💴 クリプタクトの時価で計算${same ? `（${escapeHtml(same)}）` : l.b !== row.base ? `（CSVでは ${escapeHtml(l.b)}）` : ''}</div>`;
+        } else if (lacksPrice(row)) {
+          jpyHtml = '<div class="cm-warn">⚠ 円価格を取得できませんでした（既定で出力しません）</div>';
+        } else if (csv.missing && eff === 'review') {
+          jpyHtml = '<div class="cm-warn">⚠ 円価格なし（出力する場合は、ダウンロード後に Price を手入力）</div>';
+        }
+        // どのウォレットの行か: 日時セルの3行目に控えめなチップで出す (長い名前は省略、全文は title)
+        const walletTag = multiWallet && row.wallet
+          ? `<div class="wtag" title="${escapeHtml(walletName(row.wallet))}（${escapeHtml(row.wallet)}）">${escapeHtml(walletName(row.wallet))}</div>`
+          : '';
+
+        return `<tr class="${rowClass}"${rowTitle}>
+          <td><input type="checkbox" class="row-check" ${checked} onchange="toggleRow(${origIdx}, this.checked)"></td>
+          <td>${badge}</td>
+          <td class="c-date">${escapeHtml(date)}<br><span>${escapeHtml(time)}</span>${walletTag}</td>
+          <td>${selectHtml}</td>
+          <td class="c-num"><span title="${escapeHtml(row.volume)}">${dispNum(row.volume)}</span><b>${escapeHtml(row.base)}</b></td>
+          <td>${escapeHtml(row.counter)}</td>
+          <td class="c-num c-fee">${fee}</td>
+          <td class="comment-cell" title="${escapeHtml(row.comment)}">${escapeHtml(row.comment)}${cpHtml}${jpyHtml}</td>
+          <td>${row.tx_hash ? `<a class="tx-link" href="${EXPLORER_BASE}${row.tx_hash}" target="_blank" rel="noopener">${shortHash}</a>` : ''}</td>
+        </tr>`;
+      }).join('') : `<tr class="tx-empty"><td colspan="9">該当する取引がありません</td></tr>`;
+      updateSelCount();
+      layoutStickyTable();  // 画面が非表示だと rAF 経由では走らないので、描き直した直後にも合わせる
+    }
+
+    // ===== Update Action =====
+    function updateAction(selectElem) {
+      const idx = parseInt(selectElem.dataset.idx);
+      allRows[idx].action = selectElem.value;
+    }
+
+    // ===== Tab Filter =====
+    function setTab(btn) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.dataset.filter;
+      renderTable();
+      // 固定表示中 (表の途中まで下げている) なら、切り替えた一覧の先頭が見える位置に戻す
+      const card = document.getElementById('resultsCard');
+      if (card.classList.contains('tx-bar-sticky')) {
+        const appbarH = document.querySelector('.appbar').offsetHeight;
+        const top = card.getBoundingClientRect().top + window.scrollY + 8 - appbarH;  // 操作バーがヘッダーの直下に来る位置
+        if (window.scrollY > top) window.scrollTo({ top });
+      }
+    }
+
+    // ===== LP Positions =====
+    function fmtAmounts(obj) {
+      const parts = Object.entries(obj || {}).map(([t, v]) => {
+        const n = parseFloat(v);
+        return `${n.toLocaleString('ja-JP', { maximumFractionDigits: 4 })} ${t}`;
+      });
+      return parts.length ? parts.join('<br>') : '-';
+    }
+
+    // ===== 台帳の除外リスト (localStorageに永続化、表示のみに影響) =====
+    function getExcludedPools() {
+      try { return new Set(JSON.parse(localStorage.getItem('lpExcludedPools') || '[]')); }
+      catch (_) { return new Set(); }
+    }
+    function saveExcludedPools(set) {
+      localStorage.setItem('lpExcludedPools', JSON.stringify([...set]));
+    }
+    function excludePool(pool) {
+      const s = getExcludedPools(); s.add(pool); saveExcludedPools(s); renderLpTable();
+    }
+    function restoreExcludedPools() {
+      saveExcludedPools(new Set()); renderLpTable();
+    }
+
+    function renderLpTable() {
+      const excluded = getExcludedPools();
+      const openCount = lpPositions.filter(p => p.status === 'open' && !excluded.has(p.pool)).length;
+      const closedCount = lpPositions.filter(p => p.status !== 'open' && !excluded.has(p.pool)).length;
+      document.getElementById('lpSummaryCount').textContent =
+        `— 運用中 ${openCount} / 清算済み ${closedCount}`;
+
+      const showClosed = document.getElementById('showClosed').checked;
+      const excludedCount = lpPositions.filter(p => excluded.has(p.pool)).length;
+      document.getElementById('lpExcludedInfo').innerHTML = excludedCount > 0
+        ? `除外中: ${excludedCount}プール <a href="#" onclick="restoreExcludedPools(); return false;" style="color: var(--clr-primary);">すべて戻す</a>`
+        : '';
+
+      const visible = lpPositions.filter(p =>
+        !excluded.has(p.pool) && (showClosed || p.status === 'open'));
+
+      const tbody = document.getElementById('lpBody');
+      tbody.innerHTML = visible.map(p => {
+        const badge = p.status === 'open'
+          ? '<span class="status-badge status-review">運用中</span>'
+          : '<span class="status-badge status-skip">清算済み</span>';
+        return `<tr>
+          <td>${badge}</td>
+          <td>${escapeHtml(p.pool)}</td>
+          <td>${fmtAmounts(p.deposited)}</td>
+          <td>${fmtAmounts(p.recovered)}</td>
+          <td><strong>${fmtAmounts(p.remaining_principal)}</strong></td>
+          <td>${fmtAmounts(p.realized_bonus)}</td>
+          <td>${fmtAmounts(p.realized_loss)}</td>
+          <td>${p.events}</td>
+          <td style="white-space:nowrap;">${escapeHtml(p.first_tx.slice(0, 10))}<br>〜${escapeHtml(p.last_tx.slice(0, 10))}</td>
+          <td><button class="btn btn-secondary" style="font-size:0.68rem; padding: 0.25rem 0.6rem;"
+                onclick="excludePool('${escapeHtml(p.pool).replace(/'/g, "\\'")}')">除外</button></td>
+        </tr>`;
+      }).join('');
+
+      if (visible.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color: var(--clr-text-muted); padding: 1rem;">表示するポジションがありません</td></tr>';
+      }
+    }
+
+    function downloadLpCSV() {
+      if (lpPositions.length === 0) return;
+      const flat = (obj) => Object.entries(obj || {}).map(([t, v]) => `${v} ${t}`).join(' / ');
+      // AsOf = この台帳を出力した日時 (申告年度の証憑として保存する用)
+      const asOf = new Date().toLocaleString('ja-JP');
+      const headers = ['Status', 'Pool', 'Deposited', 'RecoveredPrincipal', 'RemainingPrincipal', 'RealizedBonus', 'RealizedLoss', 'Events', 'FirstTx', 'LastTx', 'AsOf'];
+      const lines = [headers.join(',')];
+      lpPositions.forEach(p => {
+        lines.push([
+          p.status, p.pool, flat(p.deposited), flat(p.recovered), flat(p.remaining_principal),
+          flat(p.realized_bonus), flat(p.realized_loss), p.events, p.first_tx, p.last_tx, asOf,
+        ].map(x => `"${String(x).replace(/"/g, '""')}"`).join(','));
+      });
+      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+      const blob = new Blob([bom, lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      a.download = `flare_lp_positions_${dateStr}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // ===== CSV Download =====
+    function downloadCSV() {
+      const book = getAddressBook();
+      const checkedIdxs = new Set(allRows.filter(r => isChecked(r, book)).map(r => r._idx));
+
+      if (checkedIdxs.size === 0) {
+        showError('CSVに出力する行を選択してください。');
+        return;
+      }
+
+      const convertWflr = document.getElementById('convertWflr').checked;
+
+      // 円価格が要るのに取れていない行を、自分でチェックして出力に入れている場合は念のため確かめる
+      const noPrice = allRows.filter(r => checkedIdxs.has(r._idx) && buildCsvRows(r, convertWflr).missing).length;
+      if (noPrice > 0 && !confirm(`円価格の無い行が ${noPrice} 行含まれています。\nこのまま出力すると、クリプタクトで価格のエラーになるか、手入力が必要です。\n\n出力を続けますか？`)) return;
+
+      // クリプタクトはヘッダーが完全一致しないとファイルごと弾く (CounterVolume 列は不可)
+      const headers = ['Timestamp', 'Action', 'Source', 'Base', 'Volume', 'Price', 'Counter', 'Fee', 'FeeCcy', 'Comment'];
+      const csvRows = [headers.join(',')];
+
+      const cell = (v) => {
+        const s = String(v ?? '');
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      allRows.forEach((row, idx) => {
+        if (!checkedIdxs.has(idx)) return;
+        for (const l of buildCsvRows(row, convertWflr).lines) {
+          csvRows.push([
+            l.ts, l.action, l.source, cell(l.b), l.vol, l.price, cell(l.c),
+            l.fee, cell(l.feeCcy), `"${(l.comment || '').replace(/"/g, '""')}"`,
+          ].join(','));
+        }
+      });
+
+      const csvContent = csvRows.join('\n');
+      // BOM + UTF-8
+      const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+      const blob = new Blob([bom, csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `flare_tax_${fileRange(allRows.filter(r => checkedIdxs.has(r._idx)))}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // ===== Helpers =====
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('errorMsg');
+      el.textContent = msg;
+      el.classList.add('visible');
+    }
+
+    function hideError() {
+      document.getElementById('errorMsg').classList.remove('visible');
+    }
+
+    let progressTimer = null;
+    let progressStart = 0;
+    let lastProgress = null;  // 計算エンジンから届いた最新の進捗 (取得ごとに入れ替わる)
+
+    function toggleLoading(show, fromFile) {
+      document.getElementById('loader').classList.toggle('active', show);
+      const textEl = document.getElementById('loaderText');
+      if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+      if (show) {
+        progressStart = Date.now();
+        lastProgress = null;
+        const first = () => engine.state === 'loading' ? '計算エンジンを準備中…'
+          : fromFile ? '履歴ファイル＋新しい取引を取得しています...' : '全履歴を取得しています（初回は数分かかります）...';
+        textEl.textContent = first();
+        progressTimer = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - progressStart) / 1000);
+          const p = lastProgress;
+          if (!p) { textEl.textContent = `${first()} （経過 ${elapsed}秒）`; return; }
+          {
+            if (p.active && p.pricing_total > 0) {
+              textEl.textContent = `円価格を計算中... ${p.pricing_done} / ${p.pricing_total}行 （経過 ${elapsed}秒）`;
+            } else if (p.active && p.from_file) {
+              textEl.textContent =
+                `履歴ファイル＋新しい取引を取得中... 新しい取引 通常tx ${p.flr_items.toLocaleString()}件 / ` +
+                `トークン転送 ${p.transfer_items.toLocaleString()}件 / ` +
+                `内部tx ${p.internal_items.toLocaleString()}件 （経過 ${elapsed}秒）`;
+            } else if (p.active) {
+              textEl.textContent =
+                `全履歴を取得中... 通常tx ${p.flr_items.toLocaleString()}件 / ` +
+                `トークン転送 ${p.transfer_items.toLocaleString()}件 / ` +
+                `内部tx ${p.internal_items.toLocaleString()}件 （経過 ${elapsed}秒）`;
+            } else {
+              textEl.textContent = `取引を分類しています... （経過 ${elapsed}秒）`;
+            }
+          }
+        }, 800);
+      }
+    }
+
+    // ===== 履歴ファイル (取得を速くする) =====
+    // 読み込んだファイルは、ブラウザのメモリに持つだけ (どこにも送らない)
+    let histFile = null;        // Blob (File または 取得後の最新ファイル)。名前は histFileName
+    let histFileName = '';
+    let latestHist = null;      // 直近の取得で出来た最新のファイル {blob, filename}
+
+    function fmtBytes(n) {
+      return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+    }
+
+    function renderHistFile() {
+      document.getElementById('histLoaded').style.display = histFile ? '' : 'none';
+      document.getElementById('histRefreshWrap').style.display = histFile ? '' : 'none';
+      if (histFile) {
+        document.getElementById('histLoadedText').textContent = `読み込み済み: ${histFileName}（${fmtBytes(histFile.size)}）`;
+      } else {
+        document.getElementById('histRefresh').checked = false;
+      }
+      refreshHistPlan();
+    }
+
+    function loadHistoryFile(input) {
+      const f = input.files && input.files[0];
+      input.value = '';  // 同じファイルをもう一度選べるように
+      if (!f) return;
+      if (f.size > 200 * 1024 * 1024) {
+        showError('履歴ファイルが大きすぎます（200MBまで）。');
+        return;
+      }
+      hideError();
+      histFile = f;
+      histFileName = f.name;
+      renderHistFile();
+    }
+
+    function clearHistoryFile() {
+      histFile = null;
+      histFileName = '';
+      renderHistFile();
+    }
+
+    // ---- 読み込んだ履歴ファイルの「ウォレットごとの予定」 (通信なし。計算エンジンに中身を調べてもらう) ----
+    let histPlan = null;   // {file, key, result} 直近に調べた結果 (ファイルと対象アドレスが同じなら使い回す)
+    let histPlanTimer = null;
+
+    // 取得に使うアドレス (形式が正しいものだけ。重複は除く)
+    function validAddrs() {
+      return [...new Map(wallets.filter(w => ADDR_RE.test(w.address))
+        .map(w => [w.address.toLowerCase(), w.address])).values()];
+    }
+
+    // ファイルの選択・ウォレットの登録が変わったときに呼ぶ。入力中は少し待つ
+    function refreshHistPlan() {
+      clearTimeout(histPlanTimer);
+      if (!histFile) { histPlan = null; renderHistPlan(); return; }
+      histPlanTimer = setTimeout(inspectHistFile, 350);
+    }
+
+    async function inspectHistFile() {
+      const file = histFile;
+      if (!file) return;
+      const addrs = validAddrs();
+      const key = addrs.map(a => a.toLowerCase()).join(',');
+      if (histPlan && histPlan.file === file && histPlan.key === key) { renderHistPlan(); return; }
+      try {
+        const buf = await file.arrayBuffer();
+        const out = await engineCall({ type: 'inspect', wallets: addrs }, buf);
+        if (file !== histFile || key !== validAddrs().map(a => a.toLowerCase()).join(',')) return;  // 調べている間に変わった
+        histPlan = { file, key, result: out.result };
+      } catch (e) {
+        if (file !== histFile) return;
+        histPlan = null;
+        document.getElementById('histPlan').textContent = '';
+        return;  // 計算エンジンが使えない場合は、取得ボタンを押したときにその旨を出す
+      }
+      renderHistPlan();
+    }
+
+    function renderHistPlan() {
+      const el = document.getElementById('histPlan');
+      el.textContent = '';
+      if (!histFile || !histPlan || histPlan.file !== histFile) return;
+      const r = histPlan.result;
+      const line = (text, cls) => {
+        const d = document.createElement('div');
+        if (cls) d.className = cls;
+        d.textContent = text;
+        el.appendChild(d);
+      };
+      if (!r.ok) {
+        line(`この履歴ファイルは使えません（${String(r.message || '').replace(/。$/, '')}）。全履歴を取得します`, 'ng');
+        return;
+      }
+      const refresh = document.getElementById('histRefresh').checked;
+      const ymd = (iso) => {
+        const d = new Date(iso);
+        return isNaN(d) ? '' : `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+      };
+      r.wallets.forEach(w => {
+        const name = walletName(w.address);
+        if (w.in_file) {
+          const until = w.latest ? `〜${ymd(w.latest)} まで保存済み` : '保存済み';
+          line(`${name}：${until}（${w.txs.toLocaleString()}＋${w.transfers.toLocaleString()}件）→ `
+            + (refresh ? '全履歴を取り直して、ファイルとの違いを調べます' : '続きだけ取得'));
+        } else {
+          line(`${name}：ファイルに無い → 全履歴を取得（数分かかることがあります）`);
+        }
+      });
+      if (r.others > 0) line(`このほか ${r.others.toLocaleString()} 件のウォレットがファイルに入っています（そのまま残します）`);
+    }
+
+    // 取得が終わったら、最新の履歴ファイル (計算エンジンから受け取ったデータ) に差し替える
+    // (保存しなくても、同じ画面ではその続きから取得できる)
+    function adoptHistory(h, buf) {
+      const band = document.getElementById('histBand');
+      const text = document.getElementById('histBandText');
+      const btn = document.getElementById('histSaveBtn');
+      const blob = new Blob([buf], { type: 'application/gzip' });
+      latestHist = { blob, filename: h.filename };
+      const c = h.compare && h.compare.checked ? h.compare : null;
+      const onlyNew = c ? c.wallets.reduce((n, w) => n + w.only_new, 0) : 0;
+      const onlyFile = c ? c.wallets.reduce((n, w) => n + w.only_file, 0) : 0;
+      if (c) {
+        // 全履歴を取り直したときは、ファイルとの違いを知らせる
+        text.textContent = c.same
+          ? '全履歴を取り直しました。履歴ファイルとの違いはありませんでした'
+          : onlyNew > 0
+            ? `全履歴を取り直しました。履歴ファイルに無かった取引が ${onlyNew.toLocaleString()} 件ありました（最新のファイルを保存してください）`
+            : `全履歴を取り直しました。履歴ファイルにだけあった取引が ${onlyFile.toLocaleString()} 件ありました（最新のファイルを保存してください）`;
+      } else if (h.used_file) {
+        text.textContent = h.added > 0
+          ? `履歴ファイルに新しい取引 ${h.added.toLocaleString()} 件を足しました`
+          : '履歴ファイルは最新です（新しい取引はありません）';
+      } else {
+        text.textContent = '次回から速く取得できます';
+      }
+      btn.classList.toggle('main', !h.used_file || h.added > 0 || (c && !c.same));
+      band.classList.add('visible');
+      histFile = blob;
+      histFileName = h.filename;
+      renderHistFile();
+    }
+
+    function saveHistoryFile() {
+      if (!latestHist || !latestHist.blob) return;
+      const url = URL.createObjectURL(latestHist.blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = latestHist.filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function layoutStickyTable() {
+      const root = document.documentElement.style;
+      root.setProperty('--appbar-h', document.querySelector('.appbar').offsetHeight + 'px');
+      const card = document.getElementById('resultsCard');
+      const wrap = card.querySelector('.tx-wrap');
+      const table = document.getElementById('txTable');
+      if (!wrap.clientWidth) return;  // 非表示中
+      const wide = window.innerWidth > 900;
+      card.classList.toggle('tx-bar-sticky', wide);
+      card.classList.toggle('tx-sticky', wide && table.offsetWidth <= wrap.clientWidth + 1);
+      root.setProperty('--txbar-h', document.getElementById('txToolbar').offsetHeight + 'px');
+    }
+    (function initStickyTable() {
+      const run = () => requestAnimationFrame(layoutStickyTable);
+      window.addEventListener('resize', run);
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(run);
+        ['resultsCard', 'txToolbar', 'txTable'].forEach(id => ro.observe(document.getElementById(id)));
+        ro.observe(document.querySelector('.appbar'));
+      }
+    })();
+
+    // 起動時: 保存したウォレット一覧を出す。期間は当月1日〜当月末。アドレス欄で Enter → 取得
+    startEngine();  // ページを開いた時点で、計算エンジンの準備を始める
+    (function initWallets() {
+      loadWallets();
+      renderWallets();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitWalletList);
+      window.addEventListener('resize', fitWalletList);
+      const now = new Date();
+      const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const s = document.getElementById('startDate'), e = document.getElementById('endDate');
+      if (!s.value) s.value = ymd(new Date(now.getFullYear(), now.getMonth(), 1));
+      if (!e.value) e.value = ymd(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+      document.getElementById('wlist').addEventListener('keydown', e => {
+        if (e.key === 'Enter' && e.target.classList.contains('wa')) fetchTransactions();
+      });
+    })();
+
+    // ===== 説明ページ: 目次・カードのリンク・区分け一覧の表示 =====
+    // 目次は見出し (h2 と、「コメントの区分け一覧」の下の h3) から作る。項目はボタンで、押してもハッシュは変えない
+    // (ハッシュは initPages がページ切り替えに使っていて、知らないハッシュを入れると挙動が乱れるため)
+    const DOC_PAGES = { guide: '使い方', concepts: '区分けの考え方', disclaimer: '免責事項' };
+    const tocState = {};       // ページ名 → { aside, items: [{ el, btn }] }
+    let currentPage = null;    // 今表示しているページ (initPages が更新)
+    let tocLockUntil = 0;      // 項目を押した直後は、スクロール連動で強調が飛ばないようにする
+    const smoothBehavior = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    function scrollToHeading(el) {
+      if (el) el.scrollIntoView({ behavior: smoothBehavior(), block: 'start' });  // scroll-margin-top でヘッダーに隠れない
+    }
+    function setTocActive(st, item) {
+      st.items.forEach(it => {
+        const on = it === item;
+        it.btn.classList.toggle('active', on);
+        if (on) it.btn.setAttribute('aria-current', 'location'); else it.btn.removeAttribute('aria-current');
+      });
+      // 目次が長くて中でスクロールしているとき、強調した項目が見える位置に寄せる
+      const a = st.aside;
+      if (item && a.scrollHeight > a.clientHeight) {
+        const ar = a.getBoundingClientRect(), br = item.btn.getBoundingClientRect();
+        if (br.top < ar.top + 48) a.scrollTop -= ar.top + 48 - br.top;
+        else if (br.bottom > ar.bottom - 8) a.scrollTop += br.bottom - ar.bottom + 8;
+      }
+    }
+    function updateTocSpy() {
+      if (Date.now() < tocLockUntil) return;
+      const st = tocState[currentPage];
+      if (!st || !st.items.length) return;
+      const line = document.querySelector('.appbar').offsetHeight + 32;
+      let cur = st.items[0];
+      st.items.forEach(it => { if (!it.el.hidden && it.el.getBoundingClientRect().top <= line) cur = it; });
+      setTocActive(st, cur);
+    }
+    function buildDocToc() {
+      const narrow = window.matchMedia('(max-width: 1000px)');
+      Object.entries(DOC_PAGES).forEach(([page, title]) => {
+        const root = document.getElementById(`page-${page}`);
+        const doc = root.querySelector('.doc');
+        const aside = root.querySelector('.doc-toc');
+        if (!doc || !aside) return;
+        let underLabels = false, n = 0;
+        const heads = [];
+        doc.querySelectorAll('h2, h3').forEach(h => {
+          const isH2 = h.tagName === 'H2';
+          if (isH2) underLabels = h.id === 'labels';
+          else if (!underLabels) return;  // h3 は「コメントの区分け一覧」の配下だけ目次に出す
+          if (!h.id) h.id = `${page}-sec${++n}`;
+          heads.push({ el: h, sub: !isH2 });
+        });
+        aside.innerHTML = `<details open><summary><span class="toc-label">目次：</span><b class="toc-name">${escapeHtml(title)}</b></summary><ul>`
+          + heads.map((h, i) => `<li${h.sub ? ' class="sub"' : ''}><button type="button" class="toc-item" data-i="${i}">${escapeHtml(h.el.textContent.trim())}</button></li>`).join('')
+          + '</ul></details>';
+        const btns = aside.querySelectorAll('.toc-item');
+        const st = { aside, items: heads.map((h, i) => ({ el: h.el, btn: btns[i] })) };
+        tocState[page] = st;
+        aside.addEventListener('click', e => {
+          const b = e.target.closest('.toc-item');
+          if (!b) return;
+          const item = st.items[Number(b.dataset.i)];
+          tocLockUntil = Date.now() + 900;
+          setTocActive(st, item);
+          scrollToHeading(item.el);
+        });
+        // 広い画面では常に開いたまま、狭い画面では閉じた状態から (開閉できる)
+        const details = aside.querySelector('details');
+        const sync = () => { details.open = !narrow.matches; };
+        sync();
+        narrow.addEventListener('change', sync);
+        details.addEventListener('toggle', () => { if (!narrow.matches && !details.open) details.open = true; });
+      });
+      let tick = false;
+      const onScroll = () => {
+        if (tick) return;
+        tick = true;
+        requestAnimationFrame(() => { tick = false; updateTocSpy(); });
+      };
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll);
+    }
+    buildDocToc();
+
+    // 「区分けを見る ↓」: 下の詳しい表の見出しへスクロール (ハッシュは変えない)
+    document.addEventListener('click', e => {
+      const b = e.target.closest('[data-go]');
+      if (b) scrollToHeading(document.getElementById(b.dataset.go));
+    });
+
+    // 「コメントの区分け一覧」の表を4列にそろえる: 区分け / CSVの種類 / 扱い / 意味。
+    // HTML は「BONUS・出力」のように1つのセルに書いてあり (書きやすさ優先)、ここで「種類」と「扱い」に分ける。
+    // 括弧の補足 (「超過分は利息 LOSS」など) は意味の列の末尾へ。絞り込み用に元の文字を行に覚えておく
+    const CSV_STATE = { '出力': 'export', 'スキップ': 'skip', '要確認': 'review' };
+    function decorateLabelTables() {
+      const h2 = document.getElementById('labels');
+      if (!h2) return [];
+      const groups = [];
+      let h3 = null;
+      for (let el = h2.nextElementSibling; el; el = el.nextElementSibling) {
+        if (el.tagName === 'H3') { h3 = el; continue; }
+        const table = el.matches('.table-wrapper') ? el.querySelector('table') : null;
+        if (!table) continue;
+        const rows = [...table.querySelectorAll('tbody tr')];
+        const ths = [...table.querySelectorAll('thead th')];
+        const csvCol = ths.findIndex(th => th.textContent.trim() === 'CSV');
+        if (csvCol >= 0) {
+          table.classList.add('lb-table');
+          ths[csvCol].textContent = 'CSVの種類';
+          ths[csvCol].insertAdjacentHTML('afterend', '<th>扱い</th>');
+        }
+        rows.forEach(tr => {
+          tr.dataset.q = tr.textContent.toLowerCase().replace(/\s+/g, ' ');
+          const tds = tr.children;
+          const lab = tds[0].textContent.trim();
+          const m = lab.match(/^((?:【[^】]*】)+)([\s\S]*)$/);
+          if (m) tds[0].innerHTML = `<span class="lb-grp">${escapeHtml(m[1])}</span>${escapeHtml(m[2])}`;
+          if (csvCol < 0 || !tds[csvCol]) return;
+          const td = tds[csvCol];
+          const t = td.textContent.trim();
+          // 「BUY・要確認」「LEND / RECOVER・スキップ」「RETURN・出力（超過分は利息 LOSS）」または「スキップ」だけ
+          const c = t.match(/^(?:([A-Z][A-Z ]*(?: \/ [A-Z][A-Z ]*)*)・)?(出力|スキップ|要確認)(?:（([^）]*)）)?$/);
+          const stateTd = document.createElement('td');
+          td.after(stateTd);
+          if (!c) return;  // 形が合わないセルは元の文字のまま (扱いの列は空)
+          td.innerHTML = c[1] ? `<span class="csv-kind">${escapeHtml(c[1])}</span>` : '<span class="csv-none">–</span>';
+          stateTd.innerHTML = `<span class="status-badge status-${CSV_STATE[c[2]]}">${c[2]}</span>`;
+          if (c[3]) stateTd.nextElementSibling.insertAdjacentHTML('beforeend', `<span class="csv-note">（${escapeHtml(c[3])}）</span>`);
+        });
+        groups.push({ h3, wrap: el, rows });
+      }
+      return groups;
+    }
+    (function initLabelFilter() {
+      const groups = decorateLabelTables();
+      const input = document.getElementById('lbFilter');
+      const clear = document.getElementById('lbFilterClear');
+      const none = document.getElementById('lbNone');
+      if (!input) return;
+      const apply = () => {
+        const terms = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        let any = false;
+        groups.forEach(g => {
+          let vis = 0;
+          g.rows.forEach(tr => {
+            const ok = terms.every(t => tr.dataset.q.includes(t));
+            tr.hidden = !ok;
+            if (ok) vis++;
+          });
+          // 全部隠れた表は小見出しごと隠す
+          g.wrap.hidden = vis === 0;
+          if (g.h3) g.h3.hidden = vis === 0;
+          if (vis) any = true;
+        });
+        none.hidden = any || !terms.length;
+        clear.hidden = !terms.length;
+        updateTocSpy();
+      };
+      input.addEventListener('input', apply);
+      clear.addEventListener('click', () => { input.value = ''; apply(); input.focus(); });
+    })();
+
+    // ヘッダーのタブ: URL の #guide などでページを切り替える (取得した結果はそのまま残る)
+    (function initPages() {
+      const pages = ['tool', 'guide', 'concepts', 'disclaimer'];
+      const baseTitle = document.title;
+      // 知らないハッシュ (目次などの #…) が来たときは今のページのまま。最初の表示だけ 'tool'
+      const fromHash = () => {
+        const h = location.hash.slice(1);
+        return pages.includes(h) ? h : (currentPage || 'tool');
+      };
+      // ページごとのスクロール位置 (離れるときに保存し、戻ったら復元する。初めて開くページは先頭)
+      const scrollPos = {};
+      try { history.scrollRestoration = 'manual'; } catch (_) { /* ignore */ }
+      function show(name) {
+        const prev = currentPage;
+        if (prev && prev !== name) scrollPos[prev] = window.scrollY;
+        pages.forEach(p => { document.getElementById(`page-${p}`).hidden = p !== name; });
+        document.querySelectorAll('.nav-btn').forEach(a => {
+          const on = a.dataset.page === name;
+          a.classList.toggle('active', on);
+          if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+        });
+        document.title = DOC_PAGES[name] ? `${DOC_PAGES[name]} | ${baseTitle}` : (name === 'tool' ? baseTitle : document.title);
+        currentPage = name;
+        // 目次の sticky 位置は --appbar-h を使う。説明ページを直接開いたときにも値が入っているようにここで入れる
+        document.documentElement.style.setProperty('--appbar-h', document.querySelector('.appbar').offsetHeight + 'px');
+        if (name === 'tool') fitWalletList();
+        if (prev !== name) window.scrollTo(0, scrollPos[name] || 0);
+        updateTocSpy();
+      }
+      // リンクの #… でも切り替えるが、ハッシュで移動できない開き方 (プレビュー等) でも動くよう直接切り替える
+      document.addEventListener('click', e => {
+        const a = e.target.closest('a[href^="#"]');
+        const name = a && a.getAttribute('href').slice(1);
+        if (!pages.includes(name)) return;
+        e.preventDefault();
+        try { history.pushState(null, '', `#${name}`); } catch (_) { /* ignore */ }
+        show(name);
+      });
+      window.addEventListener('hashchange', () => show(fromHash()));
+      window.addEventListener('popstate', () => show(fromHash()));
+      show(fromHash());
+    })();
+
+    // ===== 限定公開 (簡易的な鍵) =====
+    // 公開時のデプロイで gate.json が置かれたときだけ有効 (手元で開いたときは出ない)。
+    // コードは NFKC 正規化・前後の空白除去・小文字化してから、gate.json の salt を前に付けて SHA-256。
+    // scripts/build_site.py と同じ手順でなければならない。コードそのものはどこにも置かない (ハッシュだけ)。
+    (async function initGate() {
+      const GATE_KEY = 'flare_tax_gate';
+      const norm = s => s.normalize('NFKC').trim().toLowerCase();
+      const sha256Hex = async s => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))))
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+      let cfg = null;
+      try {
+        const r = await fetch('gate.json', { cache: 'no-cache' });
+        if (r.ok) cfg = await r.json();
+      } catch (_) { /* gate.json が無い = 鍵なし */ }
+      let saved = null;
+      try { saved = localStorage.getItem(GATE_KEY); } catch (_) {}
+      if (cfg && cfg.enabled && saved !== cfg.hash) {
+        document.body.classList.add('gated');
+        document.getElementById('gate').hidden = false;
+        const input = document.getElementById('gateInput');
+        document.getElementById('gateForm').addEventListener('submit', async ev => {
+          ev.preventDefault();
+          if (await sha256Hex(cfg.salt + norm(input.value)) === cfg.hash) {
+            try { localStorage.setItem(GATE_KEY, cfg.hash); } catch (_) {}
+            document.getElementById('gate').hidden = true;
+            document.body.classList.remove('gated');
+            // 隠れている間は幅を測れないので、開いたあとで並べ直す
+            window.dispatchEvent(new Event('resize'));
+          } else {
+            document.getElementById('gateErr').textContent = 'コードが違います。もう一度お試しください。';
+            input.select();
+          }
+        });
+        input.focus();
+      }
+      document.documentElement.classList.remove('gate-check');
+    })();
+  </script>
+</body>
+
+</html>
